@@ -24,7 +24,7 @@ def submitJob (jobID, nEvents, queue, fileName, fileDir, execDir):
     f = open (jobname, 'w')
     f.write ('#!/bin/sh' + '\n\n')
     f.write ('source '+execDir+'minbias_setup_slc6.sh \n')
-    f.write (execDir+'genMinBias_14TeV ' + nEvents + ' ' + fileName + ' \n\n')
+    f.write (execDir+'/../genMinBias_14TeV ' + nEvents + ' ' + fileName + ' \n\n')
     f.write ('cp ' + fileName + ' ' + fileDir + '\n')
     f.close ()
     getstatusoutput ('chmod 755 ' + jobname)
@@ -45,7 +45,7 @@ if __name__ == '__main__':
     
     args = parser.parse_args ()
 
-    execDir = getoutput('pwd')+'/../'
+    execDir = getoutput('pwd')
 
     print 'submitting', args.jobsNum, 'jobs to queue', args.queue
     for i in range (0, int(args.jobsNum)):
