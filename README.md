@@ -3,7 +3,7 @@ LatinoTreesDelphes
 
 Latino tree dumper from Delphes
 
-*Minimum bias samples generation with pythia8:
+* Minimum bias samples generation with pythia8:
 ```   
     - source scripts/minbias_setup_slc6
     - gcc -I$HEPMC/include/ -L$HEPMC/lib -I$PYTHIA8DATA/../include -L$PYTHIA8DATA/../lib -I$LHAPDF/include -L$LHAPDF/lib
