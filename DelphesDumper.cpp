@@ -1,11 +1,10 @@
 
 /*c++ -O2 -lm `root-config --cflags --glibs` -L /afs/cern.ch/work/d/depoyraz/VBS/TP/CMSSW_6_2_0_SLHC19/src/Delphes_Two/Delphes -I /afs/cern.ch/work/d/depoyraz/VBS/TP/CMSSW_6_2_0_SLHC19/src/Delphes_Two/Delphes -l Delphes -o DelphesDumper DelphesDumper.cpp
-  ./DelphesDumper file.txt output.root
-  file: list of the delphes trees
+  ./DelphesDumper rootfile  output.root
 */
 
-#include <algorithm>    
-#include <vector> 
+#include <algorithm>
+#include <vector>
 #include <iostream>
 #include <fstream>
 #include <utility>
@@ -20,6 +19,7 @@
 #include "TObjArray.h"
 #include "TLorentzVector.h"
 #include "TMath.h"
+#include "TStopwatch.h"
 #include "classes/DelphesClasses.h"
 #include "external/ExRootAnalysis/ExRootTreeReader.h"
 
@@ -27,57 +27,43 @@
 using namespace std;
 
 //****************************************************************************************
-struct eventType
-{
-  vector<long int> eventID;
-  vector<int> eventChannel;
-  // event channel: 0 DF, 1 ElEl, 2MuMu
+
+//****************************************************************************************
+// runs over all entries in the delphes tree
+
+ 
+//****************************************************************************************
+
+struct Lepton {
+  unsigned int type; //0:electron , 1:muon
+  unsigned int index;
+  float lpt, leta, lphi, liso, lisoDBeta, lisoRhoCorr, lsumChargedHadron, lsumNeutral, lsumChargedPU, lsumAllParticles;
+  double lch;
 };
 
-//****************************************************************************************
-// runs over all entries in the delphes tree 
-// no inital cuts applied for the event selector
-
-
-
-eventType event_preselector(ExRootTreeReader *delphesTree, TClonesArray* branchEl ,TClonesArray* branchMu)
+struct lheParticleDescendingPt
 {
-  cout << endl << "################## EVENTS PRESELECTION ##################" << endl;
-  eventType goodEvent;
-  int iEvent=0;
-  for(iEvent = 0; iEvent < delphesTree->GetEntries(); iEvent++)
-    {
-      if (iEvent % 10000 == 0)
-	{
-	  cout << "iEvent = " << iEvent << endl;
-	}
-      delphesTree -> ReadEntry(iEvent);
-      // select DF events
-      if(branchEl->GetEntriesFast() >= 1 && branchMu->GetEntriesFast() >= 1)
-	{
-	  goodEvent.eventID.push_back(iEvent);
-	  goodEvent.eventChannel.push_back(0);
-	}
-      // select SF events
-      if(branchMu->GetEntriesFast() >= 2 && branchEl->GetEntriesFast() == 0)
-	{
-	  goodEvent.eventID.push_back(iEvent);
-	  goodEvent.eventChannel.push_back(2);
-	}
-	
-      if(branchEl->GetEntriesFast() >= 2 && branchMu->GetEntriesFast() == 0)
-	{
-	  goodEvent.eventID.push_back(iEvent);
-	  goodEvent.eventChannel.push_back(1);
-	}
-	
-    }
-  cout << "######### events from delphes: " << iEvent << endl;
-  cout << "######### events after preselection cuts: "<<goodEvent.eventID.size()<<endl;
-  return goodEvent;
-}
+  bool operator() (LHEParticle* a, LHEParticle* b)
+  {
+    return a->PT > b->PT;
+  }
+};	
+struct JetDescendingPt
+{
+  bool operator() (Jet* a, Jet* b)
+  {
+    return a->PT > b->PT;
+  }
+};
 
-//****************************************************************************************
+
+struct leptonDescendingPt
+{
+  bool operator() (const Lepton& a, const Lepton& b)
+  {
+    return a.lpt > b.lpt;
+  }
+};
 
 float DeltaR(float eta1, float eta2, float phi1, float phi2)
 {
@@ -106,6 +92,7 @@ int main (int argc, char *argv[])
   //----------------------------------------------------------------------------------------
   //complex object definitions
   vector<string> inputFiles;
+  //change it for root input
   TChain* delphesNtuples = new TChain("Delphes");
   ExRootTreeReader *delphesTree = new ExRootTreeReader(delphesNtuples);
   //new
@@ -119,970 +106,1004 @@ int main (int argc, char *argv[])
       cout << "ERROR: not enough info provided" << endl;
       return 0;
     }
-  ifstream inputList (argv[1], ios::in);
-  string buffer;
-  while(inputList >> buffer)
-    {
-      inputFiles.push_back(buffer);
-      cout << "####### Input file #" << inputFiles.size() << ": " << inputFiles.back() << endl;
-    }
-  //--------- filling the TChain
-  for (int iFiles = 0; iFiles < (int)inputFiles.size(); iFiles++)
-    {
-      delphesNtuples -> Add((inputFiles.at(iFiles)).c_str());
-
-
-    }
+    
+	
+  delphesNtuples -> Add(argv[1]);
+	
   delphesNtuples -> BranchRef();
     
-
-
+  Long64_t numberOfEntries = delphesTree->GetEntries();
+  cout<<"##### Number of Entires in the Delphes Tree is: "<<numberOfEntries<<endl;
+    
+    
+	
+    
   //----------------------------------------------------------------------------------------
   //variable management
   //
   // -> all objects in the output tree are stored in decreasing pt order.
-
+    
   //--------- getting objects from the delphes tree
-
+  TClonesArray* branchLHEParticle = delphesTree->UseBranch("LHEParticles");
   TClonesArray* branchEl = delphesTree->UseBranch("Electron");
   TClonesArray* branchMu = delphesTree->UseBranch("Muon");
-  TClonesArray* branchJet = delphesTree->UseBranch("Jet");
-  TClonesArray* branchGenParticle = delphesTree->UseBranch("Particle");
   TClonesArray* branchGenJet = delphesTree->UseBranch("GenJet");
+  TClonesArray* branchTrackJet = delphesTree->UseBranch("TrackJet");
+  TClonesArray* branchJet = delphesTree->UseBranch("JetPUID");
+  TClonesArray* branchPuppiJet = delphesTree->UseBranch("PuppiJetPUID");
+    
   TClonesArray* branchMET = delphesTree->UseBranch("MissingET");
   TClonesArray* branchPuppiMET = delphesTree->UseBranch("PuppiMissingET");
   TClonesArray* branchGenMET = delphesTree->UseBranch("GenMissingET");
-  TClonesArray* branchPuppiJet = delphesTree->UseBranch("PuppiJet");
     
-  //--------- getting leaf objects LHE information from the delphes tree
-    
-   
-    
-  vector <float> *lhe_lep_number=0, *lhe_par_number=0, *lhe_nu_number=0 ;
-  vector <float> *lhe_lep_pt1=0,  *lhe_lep_eta1=0, *lhe_lep_phi1=0, *lhe_lep_pid1=0, *lhe_lep_pt2=0, *lhe_lep_eta2=0, *lhe_lep_phi2=0, *lhe_lep_pid2=0, *lhe_lep_pt3=0, *lhe_lep_eta3=0, *lhe_lep_phi3=0, *lhe_lep_pid3=0 ;
-  vector <float> *lhe_nu_pt1=0, *lhe_nu_eta1=0, *lhe_nu_phi1=0, *lhe_nu_pid1=0, *lhe_nu_pt2=0, *lhe_nu_eta2=0, *lhe_nu_phi2=0, *lhe_nu_pid2=0, *lhe_nu_pt3=0, *lhe_nu_eta3=0, *lhe_nu_phi3=0, *lhe_nu_pid3=0 ;
-  vector <float> *lhe_par_pt1=0, *lhe_par_eta1=0, *lhe_par_phi1=0, *lhe_par_pid1=0, *lhe_par_pt2=0, *lhe_par_eta2=0, *lhe_par_phi2=0, *lhe_par_pid2=0, *lhe_par_pt3=0, *lhe_par_eta3=0, *lhe_par_phi3=0, *lhe_par_pid3=0 ;
-   
+  TClonesArray* branchNPU = delphesTree->UseBranch("NPU");
+  TClonesArray* branchGlobalRhokt4 = delphesTree->UseBranch("GlobalRhoKt4");
+  TClonesArray* branchGlobalRhoGFJ= delphesTree->UseBranch("GlobalRhoGridFastJet");
 
     
-  delphesNtuples->SetBranchAddress("lhe_lep_number", &lhe_lep_number);
-    
-  delphesNtuples->SetBranchAddress("lhe_par_number", &lhe_par_number);
-  delphesNtuples->SetBranchAddress("lhe_nu_number", &lhe_nu_number);
-  delphesNtuples->SetBranchAddress("lhe_lep_pt1", &lhe_lep_pt1);
-  delphesNtuples->SetBranchAddress("lhe_lep_eta1", &lhe_lep_eta1);
-  delphesNtuples->SetBranchAddress("lhe_lep_phi1", &lhe_lep_phi1);
-  delphesNtuples->SetBranchAddress("lhe_lep_pid1", &lhe_lep_pid1);
-  delphesNtuples->SetBranchAddress("lhe_lep_pt2", &lhe_lep_pt2);
-  delphesNtuples->SetBranchAddress("lhe_lep_eta2", &lhe_lep_eta2);
-  delphesNtuples->SetBranchAddress("lhe_lep_phi2", &lhe_lep_phi2);
-  delphesNtuples->SetBranchAddress("lhe_lep_pid2", &lhe_lep_pid2);
-  delphesNtuples->SetBranchAddress("lhe_lep_pt3", &lhe_lep_pt3);
-  delphesNtuples->SetBranchAddress("lhe_lep_eta3", &lhe_lep_eta3);
-  delphesNtuples->SetBranchAddress("lhe_lep_phi3", &lhe_lep_phi3);
-  delphesNtuples->SetBranchAddress("lhe_lep_pid3", &lhe_lep_pid3);
-  delphesNtuples->SetBranchAddress("lhe_nu_pt1", &lhe_nu_pt1);
-  delphesNtuples->SetBranchAddress("lhe_nu_eta1", &lhe_nu_eta1);
-  delphesNtuples->SetBranchAddress("lhe_nu_phi1", &lhe_nu_phi1);
-  delphesNtuples->SetBranchAddress("lhe_nu_pid1", &lhe_nu_pid1);
-  delphesNtuples->SetBranchAddress("lhe_nu_pt2", &lhe_nu_pt2);
-  delphesNtuples->SetBranchAddress("lhe_nu_eta2", &lhe_nu_eta2);
-  delphesNtuples->SetBranchAddress("lhe_nu_phi2", &lhe_nu_phi2);
-  delphesNtuples->SetBranchAddress("lhe_nu_pid2", &lhe_nu_pid2);
-  delphesNtuples->SetBranchAddress("lhe_nu_pt3", &lhe_nu_pt3);
-  delphesNtuples->SetBranchAddress("lhe_nu_eta3", &lhe_nu_eta3);
-  delphesNtuples->SetBranchAddress("lhe_nu_phi3", &lhe_nu_phi3);
-  delphesNtuples->SetBranchAddress("lhe_nu_pid3", &lhe_nu_pid3);
-  delphesNtuples->SetBranchAddress("lhe_par_pt1", &lhe_par_pt1);
-  delphesNtuples->SetBranchAddress("lhe_par_eta1", &lhe_par_eta1);
-  delphesNtuples->SetBranchAddress("lhe_par_phi1", &lhe_par_phi1);
-  delphesNtuples->SetBranchAddress("lhe_par_pid1", &lhe_par_pid1);
-  delphesNtuples->SetBranchAddress("lhe_par_pt2", &lhe_par_pt2);
-  delphesNtuples->SetBranchAddress("lhe_par_eta2", &lhe_par_eta2);
-  delphesNtuples->SetBranchAddress("lhe_par_phi2", &lhe_par_phi2);
-  delphesNtuples->SetBranchAddress("lhe_par_pid2", &lhe_par_pid2);
-  delphesNtuples->SetBranchAddress("lhe_par_pt3", &lhe_par_pt3);
-  delphesNtuples->SetBranchAddress("lhe_par_eta3", &lhe_par_eta3);
-  delphesNtuples->SetBranchAddress("lhe_par_phi3", &lhe_par_phi3);
-  delphesNtuples->SetBranchAddress("lhe_par_pid3", &lhe_par_pid3);
-    
-    
+
     
     
   //--------- Creating branches for the new (light) tree
-
+    
   //--------- LHE Information
-
- 
-  float leptonLHEpt_tmp[3], leptonLHEeta_tmp[3], leptonLHEphi_tmp[3], leptonLHEpid_tmp[3];
-  float neutrinoLHEpt_tmp[3], neutrinoLHEeta_tmp[3], neutrinoLHEphi_tmp[3], neutrinoLHEpid_tmp[3];
-  float jetLHEPartonpt_tmp[3], jetLHEPartoneta_tmp[3], jetLHEPartonphi_tmp[3], jetLHEPartonpid_tmp[3];
-
-  easyTree -> Branch("leptonLHEpt1",&leptonLHEpt_tmp[0],"leptonLHEpt1/F");
-  easyTree -> Branch("leptonLHEeta1",&leptonLHEeta_tmp[0],"leptonLHEeta1/F");
-  easyTree -> Branch("leptonLHEphi1",&leptonLHEphi_tmp[0],"leptonLHEphi1/F");
-  easyTree -> Branch("leptonLHEpid1",&leptonLHEpid_tmp[0],"leptonLHEpid1/F");
-  easyTree -> Branch("leptonLHEpt2",&leptonLHEpt_tmp[1],"leptonLHEpt2/F");
-  easyTree -> Branch("leptonLHEeta2",&leptonLHEeta_tmp[1],"leptonLHEeta2/F");
-  easyTree -> Branch("leptonLHEphi2",&leptonLHEphi_tmp[1],"leptonLHEphi2/F");
-  easyTree -> Branch("leptonLHEpid2",&leptonLHEpid_tmp[1],"leptonLHEpid2/F");
-  easyTree -> Branch("leptonLHEpt3",&leptonLHEpt_tmp[2],"leptonLHEpt3/F");
-  easyTree -> Branch("leptonLHEeta3",&leptonLHEeta_tmp[2],"leptonLHEeta3/F");
-  easyTree -> Branch("leptonLHEphi3",&leptonLHEphi_tmp[2],"leptonLHEphi3/F");
-  easyTree -> Branch("leptonLHEpid3",&leptonLHEpid_tmp[2],"leptonLHEpid3/F");
+  int nlhe=4;
+  int nlhes=2;
+    
+  float leptonLHEpt_tmp[nlhe], leptonLHEeta_tmp[nlhe], leptonLHEphi_tmp[nlhe], leptonLHEpid_tmp[nlhe], leptonLHEch_tmp[nlhe], leptonLHEm_tmp[nlhe] ;
+  float neutrinoLHEpt_tmp[nlhe], neutrinoLHEeta_tmp[nlhe], neutrinoLHEphi_tmp[nlhe], neutrinoLHEpid_tmp[nlhe];
+  float jetLHEPartonpt_tmp[nlhe], jetLHEPartoneta_tmp[nlhe], jetLHEPartonphi_tmp[nlhe], jetLHEPartonpid_tmp[nlhe];
+  float jetLHEGluonpt_tmp[nlhe], jetLHEGluoneta_tmp[nlhe], jetLHEGluonphi_tmp[nlhe], jetLHEGluonpid_tmp[nlhe], jetLHEGluonch_tmp[nlhe] ;
+  float vbosonLHEpt_tmp[nlhe], vbosonLHEeta_tmp[nlhe], vbosonLHEphi_tmp[nlhe], vbosonLHEpid_tmp[nlhe], vbosonLHEch_tmp[nlhe],vbosonLHEm_tmp[nlhe] ;
 	
-  easyTree -> Branch("neutrinoLHEpt1",&neutrinoLHEpt_tmp[0],"neutrinoLHEpt1/F");
-  easyTree -> Branch("neutrinoLHEeta1",&neutrinoLHEeta_tmp[0],"neutrinoLHEeta1/F");
-  easyTree -> Branch("neutrinoLHEphi1",&neutrinoLHEphi_tmp[0],"neutrinoLHEphi1/F");
-  easyTree -> Branch("neutrinoLHEpid1",&neutrinoLHEpid_tmp[0],"neutrinoLHEpid1/F");
-  easyTree -> Branch("neutrinoLHEpt2",&neutrinoLHEpt_tmp[1],"neutrinoLHEpt2/F");
-  easyTree -> Branch("neutrinoLHEeta2",&neutrinoLHEeta_tmp[1],"neutrinoLHEeta2/F");
-  easyTree -> Branch("neutrinoLHEphi2",&neutrinoLHEphi_tmp[1],"neutrinoLHEphi2/F");
-  easyTree -> Branch("neutrinoLHEpid2",&neutrinoLHEpid_tmp[1],"neutrinoLHEpid2/F");
-  easyTree -> Branch("neutrinoLHEpt3",&neutrinoLHEpt_tmp[2],"neutrinoLHEpt3/F");
-  easyTree -> Branch("neutrinoLHEeta3",&neutrinoLHEeta_tmp[2],"neutrinoLHEeta3/F");
-  easyTree -> Branch("neutrinoLHEphi3",&neutrinoLHEphi_tmp[2],"neutrinoLHEphi3/F");
-  easyTree -> Branch("neutrinoLHEpid3",&neutrinoLHEpid_tmp[2],"neutrinoLHEpid3/F");
 	
-  easyTree -> Branch("jetLHEPartonpt1",&jetLHEPartonpt_tmp[0],"jetLHEPartonpt1/F");
-  easyTree -> Branch("jetLHEPartoneta1",&jetLHEPartoneta_tmp[0],"jetLHEPartoneta1/F");
-  easyTree -> Branch("jetLHEPartonphi1",&jetLHEPartonphi_tmp[0],"jetLHEPartonphi1/F");
-  easyTree -> Branch("jetLHEPartonpid1",&jetLHEPartonpid_tmp[0],"jetLHEPartonpid1/F");
-  easyTree -> Branch("jetLHEPartonpt2",&jetLHEPartonpt_tmp[1],"jetLHEPartonpt2/F");
-  easyTree -> Branch("jetLHEPartoneta2",&jetLHEPartoneta_tmp[1],"jetLHEPartoneta2/F");
-  easyTree -> Branch("jetLHEPartonphi2",&jetLHEPartonphi_tmp[1],"jetLHEPartonphi2/F");
-  easyTree -> Branch("jetLHEPartonpid2",&jetLHEPartonpid_tmp[1],"jetLHEPartonpid2/F");
-  easyTree -> Branch("jetLHEPartonpt3",&jetLHEPartonpt_tmp[2],"jetLHEPartonpt3/F");
-  easyTree -> Branch("jetLHEPartoneta3",&jetLHEPartoneta_tmp[2],"jetLHEPartoneta3/F");
-  easyTree -> Branch("jetLHEPartonphi3",&jetLHEPartonphi_tmp[2],"jetLHEPartonphi3/F");
-  easyTree -> Branch("jetLHEPartonpid3",&jetLHEPartonpid_tmp[2],"jetLHEPartonpid3/F");
-
-
-  //--------- Gen Particles
-
-  float jetGenPartonpt_tmp[3];
-  float jetGenPartonpid_tmp[3];   
-  float jetGenPartonphi_tmp[3];
-  float jetGenPartoneta_tmp[3];
-  float leptonGenpt_tmp[3];
-  float leptonGenpid_tmp[3];
-  float leptonGenphi_tmp[3];
-  float leptonGeneta_tmp[3];
-  float neutrinoGenpt_tmp[3];
-  float neutrinoGenpid_tmp[3];
-  float neutrinoGenphi_tmp[3];
-  float neutrinoGeneta_tmp[3];
+  for(int ilhe =0; ilhe<nlhe; ilhe++){
+    TString leptonLHEptStr = "leptonLHEpt"; leptonLHEptStr += (ilhe+1);
+    TString leptonLHEetaStr = "leptonLHEeta"; leptonLHEetaStr += (ilhe+1);
+    TString leptonLHEphiStr = "leptonLHEphi"; leptonLHEphiStr += (ilhe+1);
+    TString leptonLHEpidStr = "leptonLHEpid"; leptonLHEpidStr += (ilhe+1);
+    TString leptonLHEchStr = "leptonLHEch"; leptonLHEchStr += (ilhe+1);
+    TString leptonLHEmStr = "leptonLHEm"; leptonLHEmStr += (ilhe+1);
+    TString neutrinoLHEptStr = "neutrinoLHEpt"; neutrinoLHEptStr += (ilhe+1);
+    TString neutrinoLHEetaStr = "neutrinoLHEeta"; neutrinoLHEetaStr += (ilhe+1);
+    TString neutrinoLHEphiStr = "neutrinoLHEphi"; neutrinoLHEphiStr += (ilhe+1);
+    TString neutrinoLHEpidStr = "neutrinoLHEpid"; neutrinoLHEpidStr += (ilhe+1);
+    TString jetLHEPartonptStr = "jetLHEPartonpt"; jetLHEPartonptStr += (ilhe+1);
+    TString jetLHEPartonetaStr = "jetLHEPartoneta"; jetLHEPartonetaStr += (ilhe+1);
+    TString jetLHEPartonphiStr = "jetLHEPartonphi"; jetLHEPartonphiStr += (ilhe+1);
+    TString jetLHEPartonpidStr = "jetLHEPartonpid"; jetLHEPartonpidStr += (ilhe+1);
+        
+    easyTree -> Branch(leptonLHEptStr,&leptonLHEpt_tmp[ilhe],leptonLHEptStr+"/F");
+    easyTree -> Branch(leptonLHEetaStr,&leptonLHEeta_tmp[ilhe],leptonLHEetaStr+"/F");
+    easyTree -> Branch(leptonLHEphiStr,&leptonLHEphi_tmp[ilhe],leptonLHEphiStr+"/F");
+    easyTree -> Branch(leptonLHEpidStr,&leptonLHEpid_tmp[ilhe],leptonLHEpidStr+"/F");
+    easyTree -> Branch(leptonLHEchStr,&leptonLHEch_tmp[ilhe],leptonLHEchStr+"/F");
+    easyTree -> Branch(leptonLHEmStr,&leptonLHEm_tmp[ilhe],leptonLHEmStr+"/F");
+    easyTree -> Branch(neutrinoLHEptStr,&neutrinoLHEpt_tmp[ilhe],neutrinoLHEptStr+"/F");
+    easyTree -> Branch(neutrinoLHEetaStr,&neutrinoLHEeta_tmp[ilhe],neutrinoLHEetaStr+"/F");
+    easyTree -> Branch(neutrinoLHEphiStr,&neutrinoLHEphi_tmp[ilhe],neutrinoLHEphiStr+"/F");
+    easyTree -> Branch(neutrinoLHEpidStr,&neutrinoLHEpid_tmp[ilhe],neutrinoLHEpidStr+"/F");
+    easyTree -> Branch(jetLHEPartonptStr,&jetLHEPartonpt_tmp[ilhe],jetLHEPartonptStr+"/F");
+    easyTree -> Branch(jetLHEPartonetaStr,&jetLHEPartoneta_tmp[ilhe],jetLHEPartonetaStr+"/F");
+    easyTree -> Branch(jetLHEPartonphiStr,&jetLHEPartonphi_tmp[ilhe],jetLHEPartonphiStr+"/F");
+    easyTree -> Branch(jetLHEPartonpidStr,&jetLHEPartonpid_tmp[ilhe],jetLHEPartonpidStr+"/F");
+        
+  }
     
-    
-  easyTree -> Branch("jetGenPartonpt1",&jetGenPartonpt_tmp[0],"jetGenPartonpt1/F");
-  easyTree -> Branch("jetGenPartonpt2",&jetGenPartonpt_tmp[1],"jetGenPartonpt1/F");
-  easyTree -> Branch("jetGenPartonpt3",&jetGenPartonpt_tmp[2],"jetGenPartonpt3/F");
-  easyTree -> Branch("jetGenPartonpt4",&jetGenPartonpt_tmp[3],"jetGenPartonpt4/F");
-  easyTree -> Branch("jetGenPartonpid1",&jetGenPartonpid_tmp[0],"jetGenPartonpid1/F");
-  easyTree -> Branch("jetGenPartonpid2",&jetGenPartonpid_tmp[1],"jetGenPartonpid2/F");
-  easyTree -> Branch("jetGenPartonpid3",&jetGenPartonpid_tmp[2],"jetGenPartonpid3/F");
-  easyTree -> Branch("jetGenPartonpid4",&jetGenPartonpid_tmp[3],"jetGenPartonpid4/F");
-  easyTree -> Branch("jetGenPartonphi1",&jetGenPartonphi_tmp[0],"jetGenPartonphi1/F");
-  easyTree -> Branch("jetGenPartonphi2",&jetGenPartonphi_tmp[1],"jetGenPartonphi2/F");    
-  easyTree -> Branch("jetGenPartonphi3",&jetGenPartonphi_tmp[2],"jetGenPartonphi3/F");
-  easyTree -> Branch("jetGenPartonphi4",&jetGenPartonphi_tmp[3],"jetGenPartonphi4/F");
-  easyTree -> Branch("jetGenPartoneta1",&jetGenPartoneta_tmp[0],"jetGenPartoneta1/F");
-  easyTree -> Branch("jetGenPartoneta2",&jetGenPartoneta_tmp[1],"jetGenPartoneta2/F");    
-  easyTree -> Branch("jetGenPartoneta3",&jetGenPartoneta_tmp[2],"jetGenPartoneta3/F");
-  easyTree -> Branch("jetGenPartoneta4",&jetGenPartoneta_tmp[3],"jetGenPartoneta4/F");
-    
-    
-  easyTree -> Branch("leptonGenpt1",&leptonGenpt_tmp[0],"leptonGenpt1/F");
-  easyTree -> Branch("leptonGenpt2",&leptonGenpt_tmp[1],"leptonGenpt2/F");
-  easyTree -> Branch("leptonGenpt3",&leptonGenpt_tmp[2],"leptonGenpt3/F");
-  easyTree -> Branch("leptonGenpt4",&leptonGenpt_tmp[3],"leptonGenpt4/F");
-  easyTree -> Branch("leptonGenpid1",&leptonGenpid_tmp[0],"leptonGenpid1/F");
-  easyTree -> Branch("leptonGenpid2",&leptonGenpid_tmp[1],"leptonGenpid2/F");
-  easyTree -> Branch("leptonGenpid3",&leptonGenpid_tmp[2],"leptonGenpid3/F");
-  easyTree -> Branch("leptonGenpid4",&leptonGenpid_tmp[3],"leptonGenpid4/F");
-  easyTree -> Branch("leptonGenphi1",&leptonGenphi_tmp[0],"leptonGenphi1/F");
-  easyTree -> Branch("leptonGenphi2",&leptonGenphi_tmp[1],"leptonGenphi2/F");
-  easyTree -> Branch("leptonGenphi3",&leptonGenphi_tmp[2],"leptonGenphi3/F");
-  easyTree -> Branch("leptonGenphi4",&leptonGenphi_tmp[3],"leptonGenphi4/F");
-  easyTree -> Branch("leptonGeneta1",&leptonGeneta_tmp[0],"leptonGeneta1/F");
-  easyTree -> Branch("leptonGeneta2",&leptonGeneta_tmp[1],"leptonGeneta2/F");
-  easyTree -> Branch("leptonGeneta3",&leptonGeneta_tmp[2],"leptonGeneta3/F");
-  easyTree -> Branch("leptonGeneta4",&leptonGeneta_tmp[3],"leptonGeneta4/F");
-    
-  easyTree -> Branch("neutrinoGenpt1",&neutrinoGenpt_tmp[0],"neutrinoGenpt1/F");
-  easyTree -> Branch("neutrinoGenpt2",&neutrinoGenpt_tmp[1],"neutrinoGenpt2/F");
-  easyTree -> Branch("neutrinoGenpt3",&neutrinoGenpt_tmp[2],"neutrinoGenpt3/F");
-  easyTree -> Branch("neutrinoGenpt4",&neutrinoGenpt_tmp[3],"neutrinoGenpt4/F");
-  easyTree -> Branch("neutrinoGenpid1",&neutrinoGenpid_tmp[0],"neutrinoGenpid1/F");
-  easyTree -> Branch("neutrinoGenpid2",&neutrinoGenpid_tmp[1],"neutrinoGenpid2/F");
-  easyTree -> Branch("neutrinoGenpid3",&neutrinoGenpid_tmp[2],"neutrinoGenpid3/F");
-  easyTree -> Branch("neutrinoGenpid4",&neutrinoGenpid_tmp[3],"neutrinoGenpid4/F");
-  easyTree -> Branch("neutrinoGenphi1",&neutrinoGenphi_tmp[0],"neutrinoGenphi1/F");
-  easyTree -> Branch("neutrinoGenphi2",&neutrinoGenphi_tmp[1],"neutrinoGenphi2/F");
-  easyTree -> Branch("neutrinoGenphi3",&neutrinoGenphi_tmp[2],"neutrinoGenphi3/F");
-  easyTree -> Branch("neutrinoGenphi4",&neutrinoGenphi_tmp[3],"neutrinoGenphi4/F");
-  easyTree -> Branch("neutrinoGeneta1",&neutrinoGeneta_tmp[0],"neutrinoGeneta1/F");
-  easyTree -> Branch("neutrinoGeneta2",&neutrinoGeneta_tmp[1],"neutrinoGeneta2/F");
-  easyTree -> Branch("neutrinoGeneta3",&neutrinoGeneta_tmp[2],"neutrinoGeneta3/F");
-  easyTree -> Branch("neutrinoGeneta4",&neutrinoGeneta_tmp[3],"neutrinoGeneta4/F");
-    
-    
-    
-  //-------------------------------------------------------------------------------------------
-
-
-  //--------- Leptons
-   
-
-   
-  int nextra_tmp=-1, sameflav_tmp=-1;;
-  int channel_tmp=-1;	//0 mumu, 1 elel, 2 elmu, 3 muel
-  float eta1_tmp=-99., eta2_tmp=-99., phi1_tmp=-99., phi2_tmp=-99., ch1_tmp=-99., ch2_tmp=-99., pt1_tmp=-99., pt2_tmp=-99., iso1_tmp=-99., iso2_tmp=-99.;
-  int pdgid1_tmp = -99, pdgid2_tmp = -99;
-  //float eta3_tmp=-99., eta4_tmp=-99., phi3_tmp=-99., phi4_tmp=-99., ch3_tmp=-99., ch4_tmp=-99., pt3_tmp=-99., pt4_tmp=-99., iso3_tmp=-99., iso4_tmp=-99.;
-  //int pdgid3_tmp = -99, pdgid4_tmp = -99;
-  float mll_tmp = -1.,  PTll_tmp = -1. , dPhill_tmp = -1. , dRll_tmp = -1. , dEtall_tmp = -1. , etall_tmp = -1. , yll_tmp = -1. ;
-   
-
-  vector<float> lepton_pt;
-  TLorentzVector lep1, lep2;
-    
-  easyTree -> Branch("pt1",&pt1_tmp,"pt1/F");
-  easyTree -> Branch("pt2",&pt2_tmp,"pt/F"); 
-  easyTree -> Branch("eta1",&eta1_tmp,"eta1/F");
-  easyTree -> Branch("eta2",&eta2_tmp,"eta2/F");
-  easyTree -> Branch("phi1",&phi1_tmp,"phi1/F");
-  easyTree -> Branch("phi2",&phi2_tmp,"phi2/F");
-  easyTree -> Branch("ch1",&ch1_tmp,"ch1/F");
-  easyTree -> Branch("ch2",&ch2_tmp,"ch2/F");
-  easyTree -> Branch("iso1",&iso1_tmp,"iso1/F");
-  easyTree -> Branch("iso2",&iso2_tmp,"iso2/F");
-  easyTree -> Branch("pdgid1",&pdgid1_tmp,"pdgid1/I");
-  easyTree -> Branch("pdgid2",&pdgid2_tmp,"pdgid2/I"); 
-   
-  easyTree -> Branch("mll",&mll_tmp,"mll/F");
-  easyTree -> Branch("PTll",&PTll_tmp,"PTll/F");
-  easyTree -> Branch("dPhill",&dPhill_tmp,"dPhill/F");
-  easyTree -> Branch("dRll",&dRll_tmp,"dRll/F");  
-  easyTree -> Branch("dEtall",&dEtall_tmp,"dEtall/F"); 
-  easyTree -> Branch("etall",&etall_tmp,"etall/F"); 
-  easyTree -> Branch("yll",&yll_tmp,"yll/F");     
-  easyTree -> Branch("nextra",&nextra_tmp,"nextra/I");
-  easyTree -> Branch("sameflav",&sameflav_tmp,"sameflav/I"); 
-  easyTree -> Branch("channel",&channel_tmp,"channel/I");    
-    
-  /*    easyTree -> Branch("pt3",&pt3_tmp,"pt3/F");
-	easyTree -> Branch("pt4",&pt4_tmp,"p4/F"); 
-	easyTree -> Branch("eta3",&eta3_tmp,"eta3/F");
-	easyTree -> Branch("eta4",&eta4_tmp,"eta4/F");
-	easyTree -> Branch("phi3",&phi3_tmp,"phi3/F");
-	easyTree -> Branch("phi4",&phi4_tmp,"phi4/F");
-	easyTree -> Branch("ch3",&ch3_tmp,"ch3/F");
-	easyTree -> Branch("ch4",&ch4_tmp,"ch4/F");
-	easyTree -> Branch("iso3",&iso3_tmp,"iso3/F");
-	easyTree -> Branch("iso4",&iso4_tmp,"iso4/F");
-	easyTree -> Branch("pdgid3",&pdgid4_tmp,"pdgid4/I");
-	easyTree -> Branch("pdgid4",&pdgid4_tmp,"pdgid4/I"); 
-  */
-    
-  //----------------------------------------------------------------------------------------
-
-
-
-  //---------  GENJets
-
-  int ngenjet_tmp, ngenjetid_tmp, numbergenjet_tmp;
-
-  float jetGenpt_tmp[3];
-  float jetGenphi_tmp[3];
-  float jetGeneta_tmp[3];
-   
-    
-    
-  easyTree -> Branch("jetGenpt1",&jetGenpt_tmp[0],"jetGenpt1/F");
-  easyTree -> Branch("jetGenpt2",&jetGenpt_tmp[1],"jetGenpt1/F");
-  easyTree -> Branch("jetGenpt3",&jetGenpt_tmp[2],"jetGenpt3/F");
-  easyTree -> Branch("jetGenpt4",&jetGenpt_tmp[3],"jetGenpt4/F");
-  easyTree -> Branch("jetGenphi1",&jetGenphi_tmp[0],"jetGenphi1/F");
-  easyTree -> Branch("jetGenphi2",&jetGenphi_tmp[1],"jetGenphi2/F");    
-  easyTree -> Branch("jetGenphi3",&jetGenphi_tmp[2],"jetGenphi3/F");
-  easyTree -> Branch("jetGenphi4",&jetGenphi_tmp[3],"jetGenphi4/F");
-  easyTree -> Branch("jetGeneta1",&jetGeneta_tmp[0],"jetGeneta1/F");
-  easyTree -> Branch("jetGeneta2",&jetGeneta_tmp[1],"jetGeneta2/F");    
-  easyTree -> Branch("jetGeneta3",&jetGeneta_tmp[2],"jetGeneta3/F");
-  easyTree -> Branch("jetGeneta4",&jetGeneta_tmp[3],"jetGeneta4/F");
-
-
-  //---------  Jets
-
-  int njet_tmp, njetid_tmp, numberjet_tmp, nbjet_tmp, hardbjpb_tmp=-99, softbjpb_tmp=-99;
-  float jeteta_tmp[8];
-  float jetphi_tmp[8];
-  float jetpt_tmp[8];
-  float jetmass_tmp[8];
-  float mjj_tmp=-99., detajj_tmp=-99.; 
+  for(int ilhe =0; ilhe<nlhes; ilhe++){
+    TString vbosonLHEptStr = "vbosonLHEpt"; vbosonLHEptStr += (ilhe+1);
+    TString vbosonLHEetaStr = "vbosonLHEeta"; vbosonLHEetaStr += (ilhe+1);
+    TString vbosonLHEphiStr = "vbosonLHEphi"; vbosonLHEphiStr += (ilhe+1);
+    TString vbosonLHEpidStr = "vbosonLHEpid"; vbosonLHEpidStr += (ilhe+1);
+    TString vbosonLHEchStr = "vbosonLHEch"; vbosonLHEchStr += (ilhe+1);
+    TString vbosonLHEmStr = "vbosonLHEm"; vbosonLHEmStr += (ilhe+1);
+    TString jetLHEGluonptStr = "jetLHEGluonpt"; jetLHEGluonptStr += (ilhe+1);
+    TString jetLHEGluonetaStr = "jetLHEGluoneta"; jetLHEGluonetaStr += (ilhe+1);
+    TString jetLHEGluonphiStr = "jetLHEGluonphi"; jetLHEGluonphiStr += (ilhe+1);
+    TString jetLHEGluonpidStr = "jetLHEGluonpid"; jetLHEGluonpidStr += (ilhe+1);
+        
+    easyTree -> Branch(vbosonLHEptStr,&vbosonLHEpt_tmp[ilhe],vbosonLHEptStr+"/F");
+    easyTree -> Branch(vbosonLHEetaStr,&vbosonLHEeta_tmp[ilhe],vbosonLHEetaStr+"/F");
+    easyTree -> Branch(vbosonLHEphiStr,&vbosonLHEphi_tmp[ilhe],vbosonLHEphiStr+"/F");
+    easyTree -> Branch(vbosonLHEpidStr,&vbosonLHEpid_tmp[ilhe],vbosonLHEpidStr+"/F");
+    easyTree -> Branch(vbosonLHEchStr,&vbosonLHEch_tmp[ilhe],vbosonLHEchStr+"/F");
+    easyTree -> Branch(vbosonLHEmStr,&vbosonLHEm_tmp[ilhe],vbosonLHEmStr+"/F");
+    easyTree -> Branch(jetLHEGluonptStr,&jetLHEGluonpt_tmp[ilhe],jetLHEGluonptStr+"/F");
+    easyTree -> Branch(jetLHEGluonetaStr,&jetLHEGluoneta_tmp[ilhe],jetLHEGluonetaStr+"/F");
+    easyTree -> Branch(jetLHEGluonphiStr,&jetLHEGluonphi_tmp[ilhe],jetLHEGluonphiStr+"/F");
+    easyTree -> Branch(jetLHEGluonpidStr,&jetLHEGluonpid_tmp[ilhe],jetLHEGluonpidStr+"/F");
+		
+        
+        
+  }
 	
-  TLorentzVector jet1, jet2;
-   
+  //--------- GEN JETS Information
+  int ngjet=4;
+  float jetGenpt_tmp[ngjet], jetGeneta_tmp[ngjet], jetGenphi_tmp[ngjet],  jetGenm_tmp[ngjet] ;
+  float jetGenAreaX_tmp[ngjet], jetGenAreaY_tmp[ngjet], jetGenAreaZ_tmp[ngjet], jetGenAreaT_tmp[ngjet];
+	
+  for(int ijet = 0; ijet<ngjet; ijet++){
+    TString jetGenptStr = "jetGenpt"; jetGenptStr += (ijet+1);
+    TString jetGenetaStr = "jetGeneta"; jetGenetaStr += (ijet+1);
+    TString jetGenphiStr = "jetGenphi"; jetGenphiStr += (ijet+1);
+    TString jetGenmStr = "jetGenm"; jetGenmStr += (ijet+1);
+    TString jetGenAreaxStr = "jetGenAreaX"; jetGenAreaxStr += (ijet+1);
+    TString jetGenAreayStr = "jetGenAreaY"; jetGenAreayStr += (ijet+1);
+    TString jetGenAreazStr = "jetGenAreaZ"; jetGenAreazStr += (ijet+1);
+    TString jetGenAreatStr = "jetGenAreaT"; jetGenAreatStr += (ijet+1);
+    
+    easyTree -> Branch(jetGenptStr,&jetGenpt_tmp[ijet],jetGenptStr+"/F");
+    easyTree -> Branch(jetGenetaStr,&jetGeneta_tmp[ijet],jetGenetaStr+"/F");
+    easyTree -> Branch(jetGenphiStr,&jetGenphi_tmp[ijet],jetGenphiStr+"/F");
+    easyTree -> Branch(jetGenmStr,&jetGenm_tmp[ijet],jetGenmStr+"/F");
+    easyTree -> Branch(jetGenAreaxStr,&jetGenAreaX_tmp[ijet],jetGenAreaxStr+"/F");
+    easyTree -> Branch(jetGenAreayStr,&jetGenAreaY_tmp[ijet],jetGenAreayStr+"/F");
+    easyTree -> Branch(jetGenAreazStr,&jetGenAreaZ_tmp[ijet],jetGenAreazStr+"/F");
+    easyTree -> Branch(jetGenAreatStr,&jetGenAreaT_tmp[ijet],jetGenAreatStr+"/F");
+        
+  }
+	
+  //--------- TRACK JETS Information
+  int ntjet=8;
+	
+  float jetTrackpt_tmp[ngjet], jetTracketa_tmp[ngjet], jetTrackphi_tmp[ngjet],  jetTrackm_tmp[ngjet] ;
+  float jetTrackAreaX_tmp[ngjet], jetTrackAreaY_tmp[ngjet], jetTrackAreaZ_tmp[ngjet], jetTrackAreaT_tmp[ngjet];
+	
+	
+  for(int ijet = 0; ijet<ntjet; ijet++){
+    TString jetTrackptStr = "jetTrackpt"; jetTrackptStr += (ijet+1);
+    TString jetTracketaStr = "jetTracketa"; jetTracketaStr += (ijet+1);
+    TString jetTrackphiStr = "jetTrackphi"; jetTrackphiStr += (ijet+1);
+    TString jetTrackmStr = "jetTrackm"; jetTrackmStr += (ijet+1);
+    TString jetTrackAreaxStr = "jetTrackAreaX"; jetTrackAreaxStr += (ijet+1);
+    TString jetTrackAreayStr = "jetTrackAreaY"; jetTrackAreayStr += (ijet+1);
+    TString jetTrackAreazStr = "jetTrackAreaZ"; jetTrackAreazStr += (ijet+1);
+    TString jetTrackAreatStr = "jetTrackAreaT"; jetTrackAreatStr += (ijet+1);
+        
+    easyTree -> Branch(jetTrackptStr,&jetTrackpt_tmp[ijet],jetTrackptStr+"/F");
+    easyTree -> Branch(jetTracketaStr,&jetTracketa_tmp[ijet],jetTracketaStr+"/F");
+    easyTree -> Branch(jetTrackphiStr,&jetTrackphi_tmp[ijet],jetTrackphiStr+"/F");
+    easyTree -> Branch(jetTrackmStr,&jetTrackm_tmp[ijet],jetTrackmStr+"/F");
+    easyTree -> Branch(jetTrackAreaxStr,&jetTrackAreaX_tmp[ijet],jetTrackAreaxStr+"/F");
+    easyTree -> Branch(jetTrackAreayStr,&jetTrackAreaY_tmp[ijet],jetTrackAreayStr+"/F");
+    easyTree -> Branch(jetTrackAreazStr,&jetTrackAreaZ_tmp[ijet],jetTrackAreazStr+"/F");
+    easyTree -> Branch(jetTrackAreatStr,&jetTrackAreaT_tmp[ijet],jetTrackAreatStr+"/F");
+        
+  }
+	
+    
+  //---------  JETS (JetPUID) Information
+  int njet=8;
+	
+  float jeteta_tmp[njet], jetphi_tmp[njet], jetpt_tmp[njet],  jetmass_tmp[njet] ;
+  float jetAreaX_tmp[njet], jetAreaY_tmp[njet], jetAreaZ_tmp[njet], jetAreaT_tmp[njet];
+  float jetBTagAlgo_tmp[njet], jetBTagDefault_tmp[njet],jetBTagPhysics_tmp[njet], jetBTagNearest2_tmp[njet], jetBTagNearest3_tmp[njet], jetBTagHeaviest_tmp[njet] ;
+  float jetFlavourAlgo_tmp[njet], jetFlavourDefault_tmp[njet],jetFlavourPhysics_tmp[njet], jetFlavourNearest2_tmp[njet], jetFlavourNearest3_tmp[njet], jetFlavourHeaviest_tmp[njet];
+  float jetptD_tmp[njet], jetptDNe_tmp[njet], jetptDCh_tmp[njet];
+  float jetnNeutral_tmp[njet], jetnCharged_tmp[njet], jetneuEMfrac_tmp[njet], jetneuHadfrac_tmp[njet];
+  float jetbetaClassic_tmp[njet],jetbetaClassicStar_tmp[njet], jetbeta_tmp[njet], jetbetaStar_tmp[njet], jetconstituents_tmp[njet], jetaxis2_tmp[njet];
+  float mjj_tmp, detajj_tmp; 
+  int njet_tmp, njetid_tmp, nbjet_tmp, hardbjpb_tmp, softbjpb_tmp;
+
+  easyTree -> Branch("mjj",&mjj_tmp,"mjj/F");
+  easyTree -> Branch("detajj",&detajj_tmp,"detajj/F");
   easyTree -> Branch("njet",&njet_tmp,"njet/I");
   easyTree -> Branch("nbjet",&nbjet_tmp,"nbjet/I");
   easyTree -> Branch("hardbjpb",&hardbjpb_tmp,"hardbjpb/I");    
   easyTree -> Branch("softbjpb",&softbjpb_tmp,"softbjpb/I");    
   easyTree -> Branch("njetid",&njetid_tmp,"njetid/I");
-    
-  easyTree -> Branch("jeteta1",&jeteta_tmp[0],"jeteta1/F");
-  easyTree -> Branch("jeteta2",&jeteta_tmp[1],"jeteta2/F");
-  easyTree -> Branch("jeteta3",&jeteta_tmp[2],"jeteta3/F");
-  easyTree -> Branch("jeteta4",&jeteta_tmp[3],"jeteta4/F");
-  easyTree -> Branch("jeteta5",&jeteta_tmp[4],"jeteta5/F");
-  easyTree -> Branch("jeteta6",&jeteta_tmp[5],"jeteta6/F");
-  easyTree -> Branch("jeteta7",&jeteta_tmp[6],"jeteta7/F");
-  easyTree -> Branch("jeteta8",&jeteta_tmp[7],"jeteta8/F");
-    
-  easyTree -> Branch("jetphi1",&jetphi_tmp[0],"jetphi1/F");
-  easyTree -> Branch("jetphi2",&jetphi_tmp[1],"jetphi2/F");
-  easyTree -> Branch("jetphi3",&jetphi_tmp[2],"jetphi3/F");
-  easyTree -> Branch("jetphi4",&jetphi_tmp[3],"jetphi4/F");
-  easyTree -> Branch("jetphi5",&jetphi_tmp[4],"jetphi5/F");
-  easyTree -> Branch("jetphi6",&jetphi_tmp[5],"jetphi6/F");
-  easyTree -> Branch("jetphi7",&jetphi_tmp[6],"jetphi7/F");
-  easyTree -> Branch("jetphi8",&jetphi_tmp[7],"jetphi8/F");
-    
-  easyTree -> Branch("jetpt1",&jetpt_tmp[0],"jetpt1/F");
-  easyTree -> Branch("jetpt2",&jetpt_tmp[1],"jetpt2/F");
-  easyTree -> Branch("jetpt3",&jetpt_tmp[2],"jetpt3/F");
-  easyTree -> Branch("jetpt4",&jetpt_tmp[3],"jetpt4/F");
-  easyTree -> Branch("jetpt5",&jetpt_tmp[4],"jetpt5/F");
-  easyTree -> Branch("jetpt6",&jetpt_tmp[5],"jetpt6/F");
-  easyTree -> Branch("jetpt7",&jetpt_tmp[6],"jetpt7/F");
-  easyTree -> Branch("jetpt8",&jetpt_tmp[7],"jetpt8/F");
-    
-  easyTree -> Branch("jetmass1",&jetmass_tmp[0],"jetmass1/F");
-  easyTree -> Branch("jetmass2",&jetmass_tmp[1],"jetmass2/F");
-  easyTree -> Branch("jetmass3",&jetmass_tmp[2],"jetmass3/F");
-  easyTree -> Branch("jetmass4",&jetmass_tmp[3],"jetmass4/F");
-  easyTree -> Branch("jetmass5",&jetmass_tmp[4],"jetmass5/F");
-  easyTree -> Branch("jetmass6",&jetmass_tmp[5],"jetmass6/F");
-  easyTree -> Branch("jetmass7",&jetmass_tmp[6],"jetmass7/F");
-  easyTree -> Branch("jetmass8",&jetmass_tmp[7],"jetmass8/F");
-    
-  // to do ?
-  //  easyTree -> Branch("dphilljet",&dphilljet_tmp,"dphilljet/F");
-  //  easyTree -> Branch("dphilljetjet",&dphilljetjet_tmp,"dphilljetjet/F");
-  
-  easyTree -> Branch("mjj",&mjj_tmp,"mjj/F");
-  easyTree -> Branch("detajj",&detajj_tmp,"detajj/F");
-    
-    
-    
-    
-    
-  //-------------------------------------------------------------------------------------------
-
-  // Puppi Jets
-  int njet_puppi_tmp, njetid_puppi_tmp, numberjet_puppi_tmp, nbjet_puppi_tmp, hardbjpb_puppi_tmp=-99, softbjpb_puppi_tmp=-99;
-  float jeteta_puppi_tmp[8];
-  float jetphi_puppi_tmp[8];
-  float jetpt_puppi_tmp[8];
-  float jetmass_puppi_tmp[8];
-  float mjj_puppi_tmp=-99., detajj_puppi_tmp=-99.; 
 	
-  TLorentzVector jet1puppi, jet2puppi;
+  for(int ijet = 0; ijet<njet; ijet++){
+    TString jetptStr = "jetpt"; jetptStr += (ijet+1);
+    TString jetetaStr = "jeteta"; jetetaStr += (ijet+1);
+    TString jetphiStr = "jetphi"; jetphiStr += (ijet+1);
+    TString jetmStr = "jetmass"; jetmStr += (ijet+1);
+    TString jetAreaxStr = "jetAreaX"; jetAreaxStr += (ijet+1);
+    TString jetAreayStr = "jetAreaY"; jetAreayStr += (ijet+1);
+    TString jetAreazStr = "jetAreaZ"; jetAreazStr += (ijet+1);
+    TString jetAreatStr = "jetAreaT"; jetAreatStr += (ijet+1);
+    TString jetBTagAlgoStr = "jetBTagAlgo"; jetBTagAlgoStr += (ijet+1);
+    TString jetBTagDefaultStr = "jetBTagDefault"; jetBTagDefaultStr += (ijet+1);
+    TString jetBTagPhysicsStr = "jetBTagPhysics"; jetBTagPhysicsStr += (ijet+1);
+    TString jetBTagNearest2Str = "jetBTagNearest2_"; jetBTagNearest2Str += (ijet+1);
+    TString jetBTagNearest3Str = "jetBTagNearest3_"; jetBTagNearest3Str += (ijet+1);
+    TString jetBTagHeaviestStr = "jetBTagHeaviest_"; jetBTagHeaviestStr += (ijet+1);
+    TString jetFlavourAlgoStr = "jetFlavourAlgo"; jetFlavourAlgoStr += (ijet+1);
+    TString jetFlavourDefaultStr = "jetFlavourDefault"; jetFlavourDefaultStr += (ijet+1);
+    TString jetFlavourPhysicsStr = "jetFlavourPhysics"; jetFlavourPhysicsStr += (ijet+1);
+    TString jetFlavourNearest2Str = "jetFlavourNearest2_"; jetFlavourNearest2Str += (ijet+1);
+    TString jetFlavourNearest3Str = "jetFlavourNearest3_"; jetFlavourNearest3Str += (ijet+1);
+    TString jetFlavourHeaviestStr = "jetFlavourHeaviest_"; jetFlavourHeaviestStr += (ijet+1);
+    TString jetptDStr = "jetptD"; jetptDStr += (ijet+1);
+    TString jetptDNeStr = "jetptDNe"; jetptDNeStr += (ijet+1);
+    TString jetptDChStr = "jetptDCh"; jetptDChStr += (ijet+1);
+    TString jetnNeutralStr = "jetnNeutral"; jetnNeutralStr += (ijet+1);
+    TString jetnChargedStr = "jetnCharged"; jetnChargedStr += (ijet+1);
+    TString jetneuEMfracStr = "jetneuEMfrac"; jetneuEMfracStr += (ijet+1);
+    TString jetneuHadfracStr = "jetneuHadfrac"; jetneuHadfracStr += (ijet+1);
+    TString jetbetaClassicStr = "jetbetaClassic"; jetbetaClassicStr += (ijet+1);
+    TString jetbetaClassicStarStr = "jetbetaClassicStar"; jetbetaClassicStarStr += (ijet+1);
+    TString jetbetaStr = "jetbeta"; jetbetaStr += (ijet+1);
+    TString jetbetaStarStr = "jetbetaStar"; jetbetaStarStr += (ijet+1);
+    TString jetconstituentsStr = "jetconstituents"; jetconstituentsStr += (ijet+1);
+    TString jetaxis2Str = "jetaxis2_"; jetaxis2Str += (ijet+1);
+        
+        
+    easyTree -> Branch(jetptStr,&jetpt_tmp[ijet],jetptStr+"/F");
+    easyTree -> Branch(jetetaStr,&jeteta_tmp[ijet],jetetaStr+"/F");
+    easyTree -> Branch(jetphiStr,&jetphi_tmp[ijet],jetphiStr+"/F");
+    easyTree -> Branch(jetmStr,&jetmass_tmp[ijet],jetmStr+"/F");
+    easyTree -> Branch(jetAreaxStr,&jetAreaX_tmp[ijet],jetAreaxStr+"/F");
+    easyTree -> Branch(jetAreayStr,&jetAreaY_tmp[ijet],jetAreayStr+"/F");
+    easyTree -> Branch(jetAreazStr,&jetAreaZ_tmp[ijet],jetAreazStr+"/F");
+    easyTree -> Branch(jetAreatStr,&jetAreaT_tmp[ijet],jetAreatStr+"/F");
+    easyTree -> Branch(jetBTagAlgoStr,&jetBTagAlgo_tmp[ijet],jetBTagAlgoStr+"/F");
+    easyTree -> Branch(jetBTagDefaultStr,&jetBTagDefault_tmp[ijet],jetBTagDefaultStr+"/F");
+    easyTree -> Branch(jetBTagPhysicsStr,&jetBTagPhysics_tmp[ijet],jetBTagPhysicsStr+"/F");
+    easyTree -> Branch(jetBTagNearest2Str,&jetBTagNearest2_tmp[ijet],jetBTagNearest2Str+"/F");
+    easyTree -> Branch(jetBTagNearest3Str,&jetBTagNearest3_tmp[ijet],jetBTagNearest3Str+"/F");
+    easyTree -> Branch(jetBTagHeaviestStr,&jetBTagHeaviest_tmp[ijet],jetBTagHeaviestStr+"/F");
+    easyTree -> Branch(jetFlavourAlgoStr,&jetFlavourAlgo_tmp[ijet],jetFlavourAlgoStr+"/F");
+    easyTree -> Branch(jetFlavourDefaultStr,&jetFlavourDefault_tmp[ijet],jetFlavourDefaultStr+"/F");
+    easyTree -> Branch(jetFlavourPhysicsStr,&jetFlavourPhysics_tmp[ijet],jetFlavourPhysicsStr+"/F");
+    easyTree -> Branch(jetFlavourNearest2Str,&jetFlavourNearest2_tmp[ijet],jetFlavourNearest2Str+"/F");
+    easyTree -> Branch(jetFlavourNearest3Str,&jetFlavourNearest3_tmp[ijet],jetFlavourNearest3Str+"/F");
+    easyTree -> Branch(jetFlavourHeaviestStr,&jetFlavourHeaviest_tmp[ijet],jetFlavourHeaviestStr+"/F");
+    easyTree -> Branch(jetptDStr,&jetptD_tmp[ijet],jetptDStr+"/F");
+    easyTree -> Branch(jetptDNeStr,&jetptDNe_tmp[ijet],jetptDNeStr+"/F");
+    easyTree -> Branch(jetptDChStr,&jetptDCh_tmp[ijet],jetptDChStr+"/F");
+    easyTree -> Branch(jetnNeutralStr,&jetnNeutral_tmp[ijet],jetnNeutralStr+"/F");
+    easyTree -> Branch(jetnChargedStr,&jetnCharged_tmp[ijet],jetnChargedStr+"/F");
+    easyTree -> Branch(jetneuEMfracStr,&jetneuEMfrac_tmp[ijet],jetneuEMfracStr+"/F");
+    easyTree -> Branch(jetneuHadfracStr,&jetneuHadfrac_tmp[ijet],jetneuHadfracStr+"/F");
+    easyTree -> Branch(jetbetaClassicStr,&jetbetaClassic_tmp[ijet],jetbetaClassicStr+"/F");
+    easyTree -> Branch(jetbetaClassicStarStr,&jetbetaClassicStar_tmp[ijet],jetbetaClassicStarStr+"/F");
+    easyTree -> Branch(jetbetaStr,&jetbeta_tmp[ijet],jetbetaStr+"/F");
+    easyTree -> Branch(jetbetaStarStr,&jetbetaStar_tmp[ijet],jetbetaStarStr+"/F");
+    easyTree -> Branch(jetconstituentsStr,&jetconstituents_tmp[ijet],jetconstituentsStr+"/F");
+    easyTree -> Branch(jetaxis2Str,&jetaxis2_tmp[ijet],jetaxis2Str+"/F");
+  }
+        
+  //---------  PUPPI JETS (JetPUID) Information
+  int npujet=8;
 
-  easyTree -> Branch("njet_puppi",&njet_puppi_tmp,"njet/I");
-  easyTree -> Branch("nbjet_puppi",&nbjet_puppi_tmp,"nbjet/I");
-  easyTree -> Branch("hardbjpb_puppi",&hardbjpb_puppi_tmp,"hardbjpb/I");    
-  easyTree -> Branch("softbjpb_puppi",&softbjpb_puppi_tmp,"softbjpb/I");    
-  easyTree -> Branch("njetid_puppi",&njetid_puppi_tmp,"njetid/I");
+  float jeteta_puppi_tmp[npujet], jetphi_puppi_tmp[npujet], jetpt_puppi_tmp[npujet],  jetmass_puppi_tmp[npujet] ;
+  float jetAreaX_puppi_tmp[npujet], jetAreaY_puppi_tmp[npujet], jetAreaZ_puppi_tmp[npujet], jetAreaT_puppi_tmp[npujet];
+  float jetBTagAlgo_puppi_tmp[npujet], jetBTagDefault_puppi_tmp[npujet],jetBTagPhysics_puppi_tmp[npujet], jetBTagNearest2_puppi_tmp[npujet], jetBTagNearest3_puppi_tmp[npujet], jetBTagHeaviest_puppi_tmp[npujet] ;
+  float jetFlavourAlgo_puppi_tmp[npujet], jetFlavourDefault_puppi_tmp[npujet],jetFlavourPhysics_puppi_tmp[npujet], jetFlavourNearest2_puppi_tmp[npujet], jetFlavourNearest3_puppi_tmp[npujet], jetFlavourHeaviest_puppi_tmp[npujet];
+  float jetptD_puppi_tmp[npujet], jetptDNe_puppi_tmp[npujet], jetptDCh_puppi_tmp[npujet];
+  float jetnNeutral_puppi_tmp[npujet], jetnCharged_puppi_tmp[npujet], jetneuEMfrac_puppi_tmp[npujet], jetneuHadfrac_puppi_tmp[npujet];
+  float jetbetaClassic_puppi_tmp[npujet],jetbetaClassicStar_puppi_tmp[npujet], jetbeta_puppi_tmp[npujet], jetbetaStar_puppi_tmp[npujet], jetconstituents_puppi_tmp[npujet], jetaxis2_puppi_tmp[npujet];
+  float mjj_puppi_tmp, detajj_puppi_tmp;
+  int njet_puppi_tmp, njetid_puppi_tmp, nbjet_puppi_tmp, hardbjpb_puppi_tmp, softbjpb_puppi_tmp;
+
+  easyTree -> Branch("mjj_puppi",&mjj_puppi_tmp,"mjj_puppi/F");
+  easyTree -> Branch("detajj_puppi",&detajj_puppi_tmp,"detajj_puppi/F");
+  easyTree -> Branch("njet_puppi",&njet_puppi_tmp,"njet_puppi/I");
+  easyTree -> Branch("nbjet_puppi",&nbjet_puppi_tmp,"nbjet_puppi/I");
+  easyTree -> Branch("hardbjpb_puppi",&hardbjpb_puppi_tmp,"hardbjpb_puppi/I");
+  easyTree -> Branch("softbjpb_puppi",&softbjpb_puppi_tmp,"softbjpb_puppi/I");
+  easyTree -> Branch("njetid_puppi",&njetid_puppi_tmp,"njetid_puppi/I");
+
+  for(int ijet = 0; ijet<npujet; ijet++){
+    TString jetpt_puppiStr = "jetpt_puppi"; jetpt_puppiStr +=  (ijet+1);
+    TString jeteta_puppiStr = "jeteta_puppi"; jeteta_puppiStr +=  (ijet+1);
+    TString jetphi_puppiStr = "jetphi_puppi"; jetphi_puppiStr +=  (ijet+1);
+    TString jetm_puppiStr = "jetmass_puppi"; jetm_puppiStr +=  (ijet+1);
+    TString jetAreax_puppiStr = "jetAreaX_puppi"; jetAreax_puppiStr +=  (ijet+1);
+    TString jetAreay_puppiStr = "jetAreaY_puppi"; jetAreay_puppiStr +=  (ijet+1);
+    TString jetAreaz_puppiStr = "jetAreaZ_puppi"; jetAreaz_puppiStr +=  (ijet+1);
+    TString jetAreat_puppiStr = "jetAreaT_puppi"; jetAreat_puppiStr +=  (ijet+1);
+    TString jetBTagAlgo_puppiStr = "jetBTagAlgo_puppi"; jetBTagAlgo_puppiStr +=  (ijet+1);
+    TString jetBTagDefault_puppiStr = "jetBTagDefault_puppi"; jetBTagDefault_puppiStr +=  (ijet+1);
+    TString jetBTagPhysics_puppiStr = "jetBTagPhysics_puppi"; jetBTagPhysics_puppiStr +=  (ijet+1);
+    TString jetBTagNearest2_puppiStr = "jetBTagNearest2_puppi"; jetBTagNearest2_puppiStr +=  (ijet+1);
+    TString jetBTagNearest3_puppiStr = "jetBTagNearest3_puppi"; jetBTagNearest3_puppiStr +=  (ijet+1);
+    TString jetBTagHeaviest_puppiStr = "jetBTagHeaviest_puppi"; jetBTagHeaviest_puppiStr +=  (ijet+1);
+    TString jetFlavourAlgo_puppiStr = "jetFlavourAlgo_puppi"; jetFlavourAlgo_puppiStr +=  (ijet+1);
+    TString jetFlavourDefault_puppiStr = "jetFlavourDefault_puppi"; jetFlavourDefault_puppiStr +=  (ijet+1);
+    TString jetFlavourPhysics_puppiStr = "jetFlavourPhysics_puppi"; jetFlavourPhysics_puppiStr +=  (ijet+1);
+    TString jetFlavourNearest2_puppiStr = "jetFlavourNearest2_puppi"; jetFlavourNearest2_puppiStr +=  (ijet+1);
+    TString jetFlavourNearest3_puppiStr = "jetFlavourNearest3_puppi"; jetFlavourNearest3_puppiStr +=  (ijet+1);
+    TString jetFlavourHeaviest_puppiStr = "jetFlavourHeaviest_puppi"; jetFlavourHeaviest_puppiStr +=  (ijet+1);
+    TString jetptD_puppiStr = "jetptD_puppi"; jetptD_puppiStr +=  (ijet+1);
+    TString jetptDNe_puppiStr = "jetptDNe_puppi"; jetptDNe_puppiStr +=  (ijet+1);
+    TString jetptDCh_puppiStr = "jetptDCh_puppi"; jetptDCh_puppiStr +=  (ijet+1);
+    TString jetnNeutral_puppiStr = "jetnNeutral_puppi"; jetnNeutral_puppiStr +=  (ijet+1);
+    TString jetnCharged_puppiStr = "jetnCharged_puppi"; jetnCharged_puppiStr +=  (ijet+1);
+    TString jetneuEMfrac_puppiStr = "jetneuEMfrac_puppi"; jetneuEMfrac_puppiStr +=  (ijet+1);
+    TString jetneuHadfrac_puppiStr = "jetneuHadfrac_puppi"; jetneuHadfrac_puppiStr +=  (ijet+1);
+    TString jetbetaClassic_puppiStr = "jetbetaClassic_puppiStr"; jetbetaClassic_puppiStr +=  (ijet+1);
+    TString jetbetaClassicStar_puppiStr = "jetbetaClassicStar_puppiStr"; jetbetaClassicStar_puppiStr +=  (ijet+1);
+    TString jetbeta_puppiStr = "jetbeta_puppiStr"; jetbeta_puppiStr +=  (ijet+1);
+    TString jetbetaStar_puppiStr = "jetbetaStar_puppiStr"; jetbetaStar_puppiStr +=  (ijet+1);
+    TString jetconstituents_puppiStr = "jetconstituents_puppiStr"; jetconstituents_puppiStr +=  (ijet+1);
+    TString jetaxis2_puppiStr = "jetaxis2_puppiStr"; jetaxis2_puppiStr +=  (ijet+1);
     
-  easyTree -> Branch("jeteta1_puppi",&jeteta_puppi_tmp[0],"jeteta1/F");
-  easyTree -> Branch("jeteta2_puppi",&jeteta_puppi_tmp[1],"jeteta2/F");
-  easyTree -> Branch("jeteta3_puppi",&jeteta_puppi_tmp[2],"jeteta3/F");
-  easyTree -> Branch("jeteta4_puppi",&jeteta_puppi_tmp[3],"jeteta4/F");
-  easyTree -> Branch("jeteta5_puppi",&jeteta_puppi_tmp[4],"jeteta5/F");
-  easyTree -> Branch("jeteta6_puppi",&jeteta_puppi_tmp[5],"jeteta6/F");
-  easyTree -> Branch("jeteta7_puppi",&jeteta_puppi_tmp[6],"jeteta7/F");
-  easyTree -> Branch("jeteta8_puppi",&jeteta_puppi_tmp[7],"jeteta8/F");
     
-  easyTree -> Branch("jetphi1_puppi",&jetphi_puppi_tmp[0],"jetphi1/F");
-  easyTree -> Branch("jetphi2_puppi",&jetphi_puppi_tmp[1],"jetphi2/F");
-  easyTree -> Branch("jetphi3_puppi",&jetphi_puppi_tmp[2],"jetphi3/F");
-  easyTree -> Branch("jetphi4_puppi",&jetphi_puppi_tmp[3],"jetphi4/F");
-  easyTree -> Branch("jetphi5_puppi",&jetphi_puppi_tmp[4],"jetphi5/F");
-  easyTree -> Branch("jetphi6_puppi",&jetphi_puppi_tmp[5],"jetphi6/F");
-  easyTree -> Branch("jetphi7_puppi",&jetphi_puppi_tmp[6],"jetphi7/F");
-  easyTree -> Branch("jetphi8_puppi",&jetphi_puppi_tmp[7],"jetphi8/F");
-    
-  easyTree -> Branch("jetpt1_puppi",&jetpt_puppi_tmp[0],"jetpt1/F");
-  easyTree -> Branch("jetpt2_puppi",&jetpt_puppi_tmp[1],"jetpt2/F");
-  easyTree -> Branch("jetpt3_puppi",&jetpt_puppi_tmp[2],"jetpt3/F");
-  easyTree -> Branch("jetpt4_puppi",&jetpt_puppi_tmp[3],"jetpt4/F");
-  easyTree -> Branch("jetpt5_puppi",&jetpt_puppi_tmp[4],"jetpt5/F");
-  easyTree -> Branch("jetpt6_puppi",&jetpt_puppi_tmp[5],"jetpt6/F");
-  easyTree -> Branch("jetpt7_puppi",&jetpt_puppi_tmp[6],"jetpt7/F");
-  easyTree -> Branch("jetpt8_puppi",&jetpt_puppi_tmp[7],"jetpt8/F");
-    
-  easyTree -> Branch("jetmass1_puppi",&jetmass_puppi_tmp[0],"jetmass1/F");
-  easyTree -> Branch("jetmass2_puppi",&jetmass_puppi_tmp[1],"jetmass2/F");
-  easyTree -> Branch("jetmass3_puppi",&jetmass_puppi_tmp[2],"jetmass3/F");
-  easyTree -> Branch("jetmass4_puppi",&jetmass_puppi_tmp[3],"jetmass4/F");
-  easyTree -> Branch("jetmass5_puppi",&jetmass_puppi_tmp[4],"jetmass5/F");
-  easyTree -> Branch("jetmass6_puppi",&jetmass_puppi_tmp[5],"jetmass6/F");
-  easyTree -> Branch("jetmass7_puppi",&jetmass_puppi_tmp[6],"jetmass7/F");
-  easyTree -> Branch("jetmass8_puppi",&jetmass_puppi_tmp[7],"jetmass8/F");
-    
-  // to do ?
-  //  easyTree -> Branch("dphilljet_puppi",&dphilljet_puppi_tmp,"dphilljet/F");
-  //  easyTree -> Branch("dphilljetjet_puppi",&dphilljetjet_puppi_tmp,"dphilljetjet/F");
-  
-  easyTree -> Branch("mjj_puppi",&mjj_puppi_tmp,"mjj/F");
-  easyTree -> Branch("detajj_puppi",&detajj_puppi_tmp,"detajj/F");
-    
+    easyTree -> Branch(jetpt_puppiStr,&jetpt_puppi_tmp[ijet],jetpt_puppiStr+"/F");
+    easyTree -> Branch(jeteta_puppiStr,&jeteta_puppi_tmp[ijet],jeteta_puppiStr+"/F");
+    easyTree -> Branch(jetphi_puppiStr,&jetphi_puppi_tmp[ijet],jetphi_puppiStr+"/F");
+    easyTree -> Branch(jetm_puppiStr,&jetmass_puppi_tmp[ijet],jetm_puppiStr+"/F");
+    easyTree -> Branch(jetAreax_puppiStr,&jetAreaX_puppi_tmp[ijet],jetAreax_puppiStr+"/F");
+    easyTree -> Branch(jetAreay_puppiStr,&jetAreaY_puppi_tmp[ijet],jetAreay_puppiStr+"/F");
+    easyTree -> Branch(jetAreaz_puppiStr,&jetAreaZ_puppi_tmp[ijet],jetAreaz_puppiStr+"/F");
+    easyTree -> Branch(jetAreat_puppiStr,&jetAreaT_puppi_tmp[ijet],jetAreat_puppiStr+"/F");
+    easyTree -> Branch(jetBTagAlgo_puppiStr,&jetBTagAlgo_puppi_tmp[ijet],jetBTagAlgo_puppiStr+"/F");
+    easyTree -> Branch(jetBTagDefault_puppiStr,&jetBTagDefault_puppi_tmp[ijet],jetBTagDefault_puppiStr+"/F");
+    easyTree -> Branch(jetBTagPhysics_puppiStr,&jetBTagPhysics_puppi_tmp[ijet],jetBTagPhysics_puppiStr+"/F");
+    easyTree -> Branch(jetBTagNearest2_puppiStr,&jetBTagNearest2_puppi_tmp[ijet],jetBTagNearest2_puppiStr+"/F");
+    easyTree -> Branch(jetBTagNearest3_puppiStr,&jetBTagNearest3_puppi_tmp[ijet],jetBTagNearest3_puppiStr+"/F");
+    easyTree -> Branch(jetBTagHeaviest_puppiStr,&jetBTagHeaviest_puppi_tmp[ijet],jetBTagHeaviest_puppiStr+"/F");
+    easyTree -> Branch(jetFlavourAlgo_puppiStr,&jetFlavourAlgo_puppi_tmp[ijet],jetFlavourAlgo_puppiStr+"/F");
+    easyTree -> Branch(jetFlavourDefault_puppiStr,&jetFlavourDefault_puppi_tmp[ijet],jetFlavourDefault_puppiStr+"/F");
+    easyTree -> Branch(jetFlavourPhysics_puppiStr,&jetFlavourPhysics_puppi_tmp[ijet],jetFlavourPhysics_puppiStr+"/F");
+    easyTree -> Branch(jetFlavourNearest2_puppiStr,&jetFlavourNearest2_puppi_tmp[ijet],jetFlavourNearest2_puppiStr+"/F");
+    easyTree -> Branch(jetFlavourNearest3_puppiStr,&jetFlavourNearest3_puppi_tmp[ijet],jetFlavourNearest3_puppiStr+"/F");
+    easyTree -> Branch(jetFlavourHeaviest_puppiStr,&jetFlavourHeaviest_puppi_tmp[ijet],jetFlavourHeaviest_puppiStr+"/F");
+    easyTree -> Branch(jetptD_puppiStr,&jetptD_puppi_tmp[ijet],jetptD_puppiStr+"/F");
+    easyTree -> Branch(jetptDNe_puppiStr,&jetptDNe_puppi_tmp[ijet],jetptDNe_puppiStr+"/F");
+    easyTree -> Branch(jetptDCh_puppiStr,&jetptDCh_puppi_tmp[ijet],jetptDCh_puppiStr+"/F");
+    easyTree -> Branch(jetnNeutral_puppiStr,&jetnNeutral_puppi_tmp[ijet],jetnNeutral_puppiStr+"/F");
+    easyTree -> Branch(jetnCharged_puppiStr,&jetnCharged_puppi_tmp[ijet],jetnCharged_puppiStr+"/F");
+    easyTree -> Branch(jetneuEMfrac_puppiStr,&jetneuEMfrac_puppi_tmp[ijet],jetneuEMfrac_puppiStr+"/F");
+    easyTree -> Branch(jetneuHadfrac_puppiStr,&jetneuHadfrac_puppi_tmp[ijet],jetneuHadfrac_puppiStr+"/F");
+    easyTree -> Branch(jetbetaClassic_puppiStr,&jetbetaClassic_puppi_tmp[ijet],jetbetaClassic_puppiStr+"/F");
+    easyTree -> Branch(jetbetaClassicStar_puppiStr,&jetbetaClassicStar_puppi_tmp[ijet],jetbetaClassicStar_puppiStr+"/F");
+    easyTree -> Branch(jetbeta_puppiStr,&jetbeta_puppi_tmp[ijet],jetbeta_puppiStr+"/F");
+    easyTree -> Branch(jetbetaStar_puppiStr,&jetbetaStar_puppi_tmp[ijet],jetbetaStar_puppiStr+"/F");
+    easyTree -> Branch(jetconstituents_puppiStr,&jetconstituents_puppi_tmp[ijet],jetconstituents_puppiStr+"/F");
+    easyTree -> Branch(jetaxis2_puppiStr,&jetaxis2_puppi_tmp[ijet],jetaxis2_puppiStr+"/F");
+  }
 
 
-  //----------------------------------------------------------------------------------------
-   
+  //--------- LEPTON Branches
+
+  int nlep=4;
+  int nextra_tmp, sameflav_tmp, nlepton_tmp;
+  int channel_tmp;	//0 mumu, 1 elel, 2 elmu, 3 muel
+  float mll_tmp,  PTll_tmp, dPhill_tmp, dRll_tmp, dEtall_tmp, etall_tmp, yll_tmp;
+
+  float pt_tmp[nlhe], eta_tmp[nlhe], phi_tmp[nlhe], iso_tmp[nlep], isoDBeta_tmp[nlep], isoRhoCorr_tmp[nlep] ;
+  float sumChargedHadron_tmp[nlep], sumNeutral_tmp[nlep], sumChargedPU_tmp[nlep], sumAllParticles_tmp[nlep];
+  double  ch_tmp[nlhe];
+
+
+
+  easyTree -> Branch("mll",&mll_tmp,"mll/F");
+  easyTree -> Branch("PTll",&PTll_tmp,"PTll/F");
+  easyTree -> Branch("dPhill",&dPhill_tmp,"dPhill/F");
+  easyTree -> Branch("dRll",&dRll_tmp,"dRll/F");
+  easyTree -> Branch("dEtall",&dEtall_tmp,"dEtall/F");
+  easyTree -> Branch("etall",&etall_tmp,"etall/F");
+  easyTree -> Branch("yll",&yll_tmp,"yll/F");
+  easyTree -> Branch("nextra",&nextra_tmp,"nextra/I");
+  easyTree -> Branch("nlepton",&nlepton_tmp,"nlepton/I");
+  easyTree -> Branch("sameflav",&sameflav_tmp,"sameflav/I");
+  easyTree -> Branch("channel",&channel_tmp,"channel/I");
+
+  for(int ilep =0; ilep<nlhe; ilep++){
+    TString ptStr = "pt"; ptStr += (ilep+1);
+    TString etaStr = "eta"; etaStr += (ilep+1);
+    TString phiStr = "phi"; phiStr += (ilep+1);
+    TString chStr = "ch"; chStr += (ilep+1);
+    TString isoStr = "iso"; isoStr += (ilep+1);
+    TString isoDBetaStr = "isoDBeta"; isoDBetaStr += (ilep+1);
+    TString isoRhoCorrStr = "isoRhoCorr"; isoRhoCorrStr += (ilep+1);
+    TString sumChargedHadronStr = "sumChargedHadron"; sumChargedHadronStr += (ilep+1);
+    TString sumNeutralStr = "sumNeutral"; sumNeutralStr += (ilep+1);
+    TString sumChargedPUStr = "sumChargedPU"; sumChargedPUStr += (ilep+1);
+    TString sumAllParticlesStr = "sumAllParticles"; sumAllParticlesStr += (ilep+1);
+	    
+    easyTree -> Branch(ptStr,&pt_tmp[ilep],ptStr+"/F");
+    easyTree -> Branch(etaStr,&eta_tmp[ilep],etaStr+"/F");
+    easyTree -> Branch(phiStr,&phi_tmp[ilep],phiStr+"/F");
+    easyTree -> Branch(chStr,&ch_tmp[ilep],chStr+"/I");
+    easyTree -> Branch(isoStr,&iso_tmp[ilep],isoStr+"/F");
+    easyTree -> Branch(isoDBetaStr,&isoDBeta_tmp[ilep],isoDBetaStr+"/F");
+    easyTree -> Branch(isoRhoCorrStr,&isoRhoCorr_tmp[ilep],isoRhoCorrStr+"/F");
+    easyTree -> Branch(sumChargedHadronStr,&sumChargedHadron_tmp[ilep],sumChargedHadronStr+"/F");
+    easyTree -> Branch(sumNeutralStr,&sumNeutral_tmp[ilep],sumNeutralStr+"/F");
+    easyTree -> Branch(sumChargedPUStr,&sumChargedPU_tmp[ilep],sumChargedPUStr+"/F");
+    easyTree -> Branch(sumAllParticlesStr,&sumAllParticles_tmp[ilep],sumAllParticlesStr+"/F");
+  }
+
+
   //	MET
-
-  float pfmet_tmp=0,pfmetphi_tmp=0;
+    
+  float pfmet_tmp, pfmetphi_tmp;
   easyTree -> Branch("pfmet",&pfmet_tmp,"pfmet/F");
   easyTree -> Branch("pfmetphi",&pfmetphi_tmp,"pfmetphi/F");
 	
   //	GENMET
-
-  float metGenpt_tmp=0,metGeneta_tmp=0, metGenphi_tmp=0;
+    
+  float metGenpt_tmp, metGenphi_tmp;
   easyTree -> Branch("metGenpt",&metGenpt_tmp,"metGenpt/F");
   easyTree -> Branch("metGenphi",&metGenphi_tmp,"metGenphi/F");
     
   //	Puppi MET
-
-  float pfmet_puppi_tmp=0,pfmetphi_puppi_tmp=0;
+    
+  float pfmet_puppi_tmp, pfmetphi_puppi_tmp;
   easyTree -> Branch("pfmet_puppi",&pfmet_puppi_tmp,"pfmet_puppi/F");
   easyTree -> Branch("pfmetphi_puppi",&pfmetphi_puppi_tmp,"pfmetphi_puppi/F");
 
-
-	
-
-	
-  //filling the new (plain) tree
-  eventType goodEvent = event_preselector(delphesTree,branchEl,branchMu);
-  cout << endl << "################# TREE CREATION STARTED #################" << endl;
-  for(int iEvent = 0; iEvent < (long int)goodEvent.eventID.size(); iEvent++)
+    
+    
+  for(int iEvent = 0; iEvent <  numberOfEntries; iEvent++)
     {
       if (iEvent % 1000 == 0)
-	{
+        {
 	  cout << "iEvent = " << iEvent << endl;
-	}
-      delphesTree -> ReadEntry(goodEvent.eventID.at(iEvent));
-	
-	
-
-	
-	
-	
-      //--------- lepton branches
-      int nlep =0;
-      //--------- DF
-      if(goodEvent.eventChannel.at(iEvent) == 0)
-	{
-	  Electron* el = (Electron*) branchEl->At(0);
-	  lepton_pt.push_back(el->PT);
-	  Muon* mu = (Muon*) branchMu->At(0);
-	  lepton_pt.push_back(mu->PT);
-	    
-	  if(branchEl->GetEntries() >1) nlep++;
-	  if(branchMu->GetEntries() >1) nlep++;
-	  nextra_tmp = nlep;
-		
-	  sort(lepton_pt.begin(), lepton_pt.end());
-	  pt1_tmp = lepton_pt[1];
-	  pt2_tmp = lepton_pt[0];
-	   
-	  if(pt1_tmp == el->PT){
-	    eta1_tmp = el->Eta;
-	    phi1_tmp = el->Phi;
-	    ch1_tmp = el->Charge;
-	    iso1_tmp = el->IsolationVar;
-	    eta2_tmp = mu->Eta;
-	    phi2_tmp = mu->Phi;
-	    ch2_tmp = mu->Charge;
-    	    iso2_tmp = mu->IsolationVar;
-	    channel_tmp = 2.;	//channel =2 elmu
-	    lep1.SetPtEtaPhiM(pt1_tmp, eta1_tmp,phi1_tmp,0);
-	    lep2.SetPtEtaPhiM(pt2_tmp, eta2_tmp,phi2_tmp,0);
-	    //lepton mass are set to zero
-	    mll_tmp = (lep1 + lep2).M(); 
-	    PTll_tmp = pt1_tmp + pt2_tmp;
-	    dPhill_tmp = DeltaPhi(phi1_tmp, phi2_tmp);
-	    dRll_tmp = DeltaR(eta1_tmp, eta2_tmp, phi1_tmp, phi2_tmp);
-	    dEtall_tmp = fabs(eta1_tmp - eta2_tmp);
-	    etall_tmp = eta1_tmp + eta2_tmp;
-	    yll_tmp = (lep1 + lep2).Rapidity(); 
-	    sameflav_tmp =0;
-	  }
-	    
-	  if(pt1_tmp == mu->PT){
-	    eta1_tmp = mu->Eta;
-	    phi1_tmp = mu->Phi;
-	    ch1_tmp = mu->Charge;
-	    iso1_tmp = mu->IsolationVar;
-	    eta2_tmp = el->Eta;
-	    phi2_tmp = el->Phi;
-	    ch2_tmp = el->Charge;
-	    iso2_tmp = el->IsolationVar;
-	    channel_tmp = 3.; //channel =3 muel
-	    lep1.SetPtEtaPhiM(pt1_tmp, eta1_tmp,phi1_tmp,0);
-	    lep2.SetPtEtaPhiM(pt2_tmp, eta2_tmp,phi2_tmp,0);
-	    mll_tmp = (lep1 + lep2).M(); 
-	    PTll_tmp = pt1_tmp + pt2_tmp;
-	    dPhill_tmp = DeltaPhi(phi1_tmp, phi2_tmp);
-	    dRll_tmp = DeltaR(eta1_tmp, eta2_tmp, phi1_tmp, phi2_tmp);
-	    dEtall_tmp = fabs(eta1_tmp - eta2_tmp);
-	    etall_tmp = eta1_tmp + eta2_tmp;
-	    yll_tmp = (lep1 + lep2).Rapidity(); 
-	    sameflav_tmp =0;
-	  	  
-	  }
-	    
-	   
-	}
-      lepton_pt.clear();
-		
-      //--------- SF- ElEl
-      if(goodEvent.eventChannel.at(iEvent) == 1)
-	{
-	  Electron* el1 = (Electron*) branchEl->At(0);
-	  pt1_tmp = el1->PT;
-	  eta1_tmp = el1->Eta;
-	  phi1_tmp = el1->Phi;
-	  ch1_tmp = el1->Charge;
-	  iso1_tmp = el1->IsolationVar;
-	    
-	  Electron* el2 = (Electron*) branchEl->At(1);
-	  pt2_tmp = el2->PT;
-	  eta2_tmp = el2->Eta;
-	  phi2_tmp = el2->Phi;
-	  ch2_tmp = el2->Charge;
-	  iso2_tmp = el2->IsolationVar;
-	  channel_tmp = 1.; //channel =1 elel
-	    
-	  if(branchEl->GetEntries() >2) nlep = branchEl->GetEntries() -2;
-	  nextra_tmp = nlep;
-	  lep1.SetPtEtaPhiM(pt1_tmp, eta1_tmp,phi1_tmp,0);
-	  lep2.SetPtEtaPhiM(pt2_tmp, eta2_tmp,phi2_tmp,0);
-	  mll_tmp = (lep1 + lep2).M(); 
-	  PTll_tmp = pt1_tmp + pt2_tmp;
-	  dPhill_tmp = DeltaPhi(phi1_tmp, phi2_tmp);
-	  dRll_tmp = DeltaR(eta1_tmp, eta2_tmp, phi1_tmp, phi2_tmp);
-	  dEtall_tmp = fabs(eta1_tmp - eta2_tmp);
-	  etall_tmp = eta1_tmp + eta2_tmp;
-	  yll_tmp = (lep1 + lep2).Rapidity(); 
-	  sameflav_tmp =1;
-
-	}
-	
-      if(goodEvent.eventChannel.at(iEvent) == 2)
-	{
-	  //--------- SF- MuMu
-	  Muon* mu1 = (Muon*) branchMu->At(0);
-	  Muon* mu2 = (Muon*) branchMu->At(1);
-	  pt1_tmp = mu1->PT;
-	  eta1_tmp = mu1->Eta;
-	  phi1_tmp = mu1->Phi;
-	  ch1_tmp = mu1->Charge;
-	  iso1_tmp =mu1->IsolationVar;
-
-	  pt2_tmp = mu2->PT;
-	  eta2_tmp = mu2->Eta;
-	  phi2_tmp = mu2->Phi;
-	  ch2_tmp = mu2->Charge;
-	  iso2_tmp =mu2->IsolationVar;
-	  channel_tmp = 0.;	//channel =0 mumu
-	    
-	  if(branchMu->GetEntries() >2) nlep = branchMu->GetEntries() -2;
-	  nextra_tmp = nlep;
-	  lep1.SetPtEtaPhiM(pt1_tmp, eta1_tmp,phi1_tmp,0);
-	  lep2.SetPtEtaPhiM(pt2_tmp, eta2_tmp,phi2_tmp,0);
-	  mll_tmp = (lep1 + lep2).M(); 
-	  PTll_tmp = pt1_tmp + pt2_tmp;
-	  dPhill_tmp = DeltaPhi(phi1_tmp, phi2_tmp);
-	  dRll_tmp = DeltaR(eta1_tmp, eta2_tmp, phi1_tmp, phi2_tmp);
-	  dEtall_tmp = fabs(eta1_tmp - eta2_tmp);
-	  etall_tmp = eta1_tmp + eta2_tmp;
-	  yll_tmp = (lep1 + lep2).Rapidity(); 
-	  sameflav_tmp =1;
-
-	}
-	
-      //------ LHE
-
-
-      for(int k =0; k<3; k++){
-	leptonLHEpt_tmp[k]=-99;
-	leptonLHEeta_tmp[k]=-99;
-	leptonLHEphi_tmp[k]=-99;
-	leptonLHEpid_tmp[k]=-99;
-	neutrinoLHEpt_tmp[k]=-99;
-	neutrinoLHEeta_tmp[k]=-99;
-	neutrinoLHEphi_tmp[k]=-99;
-	neutrinoLHEpid_tmp[k]=-99;
-	jetLHEPartonpt_tmp[k]=-99;
-	jetLHEPartoneta_tmp[k]=-99;
-	jetLHEPartonphi_tmp[k]=-99;
-	jetLHEPartonpid_tmp[k]=-99;
-      }
- 	   
- 
-      delphesNtuples->GetEntry(iEvent);
+        }
+      delphesTree -> ReadEntry(iEvent);
+        
+      //------ LHE Particle Branches -----------------//
+        
+        
+        
+      vector< int> lhepartonID;
+      vector< int> lhegluonID;
+      vector< int> lheleptonID;
+      vector< int> lheneutrinoID;
+      vector< int> lhevbosonID;
+        
+      vector<LHEParticle*> lheParton;
+      vector<LHEParticle*> lheGluon;
+      vector<LHEParticle*> lheLepton;
+      vector<LHEParticle*> lheNeutrino;
+      vector<LHEParticle*> lheVBoson;
+        
       
-       
-      if(lhe_lep_pt1->at(0) > lhe_lep_pt2->at(0)){
-	leptonLHEpt_tmp[0] = lhe_lep_pt1->at(0);
-	leptonLHEpt_tmp[1] = lhe_lep_pt2->at(0);
-	leptonLHEeta_tmp[0] = lhe_lep_eta1->at(0);
-	leptonLHEeta_tmp[1] = lhe_lep_eta2->at(0);
-	leptonLHEphi_tmp[0] = lhe_lep_phi1->at(0);
-	leptonLHEphi_tmp[1] = lhe_lep_phi2->at(0);
-	leptonLHEpid_tmp[0] = lhe_lep_pid1->at(0);
-	leptonLHEpid_tmp[1] = lhe_lep_pid2->at(0);
-      }
-      else if(lhe_lep_pt2->at(0) > lhe_lep_pt1->at(0)){
-	leptonLHEpt_tmp[0] = lhe_lep_pt2->at(0);
-	leptonLHEpt_tmp[1] = lhe_lep_pt1->at(0);
-	leptonLHEeta_tmp[0] = lhe_lep_eta2->at(0);
-	leptonLHEeta_tmp[1] = lhe_lep_eta1->at(0);
-	leptonLHEphi_tmp[0] = lhe_lep_phi2->at(0);
-	leptonLHEphi_tmp[1] = lhe_lep_phi1->at(0);
-	leptonLHEpid_tmp[0] = lhe_lep_pid2->at(0);
-	leptonLHEpid_tmp[1] = lhe_lep_pid1->at(0);
-      }
-       
-      if(lhe_nu_pt1->at(0) > lhe_nu_pt2->at(0)){
-	neutrinoLHEpt_tmp[0] = lhe_nu_pt1->at(0);
-	neutrinoLHEpt_tmp[1] = lhe_nu_pt2->at(0);
-	neutrinoLHEeta_tmp[0] = lhe_nu_eta1->at(0);
-	neutrinoLHEeta_tmp[1] = lhe_nu_eta2->at(0);
-	neutrinoLHEphi_tmp[0] = lhe_nu_phi1->at(0);
-	neutrinoLHEphi_tmp[1] = lhe_nu_phi2->at(0);
-	neutrinoLHEpid_tmp[0] = lhe_nu_pid1->at(0);
-	neutrinoLHEpid_tmp[1] = lhe_nu_pid2->at(0);
-      }
-      else if(lhe_nu_pt2->at(0) > lhe_nu_pt1->at(0)){
-	neutrinoLHEpt_tmp[0] = lhe_nu_pt2->at(0);
-	neutrinoLHEpt_tmp[1] = lhe_nu_pt1->at(0);
-	neutrinoLHEeta_tmp[0] = lhe_nu_eta2->at(0);
-	neutrinoLHEeta_tmp[1] = lhe_nu_eta1->at(0);
-	neutrinoLHEphi_tmp[0] = lhe_nu_phi2->at(0);
-	neutrinoLHEphi_tmp[1] = lhe_nu_phi1->at(0);
-	neutrinoLHEpid_tmp[0] = lhe_nu_pid2->at(0);
-	neutrinoLHEpid_tmp[1] = lhe_nu_pid1->at(0);
-      }
-       
-      if(lhe_par_pt1->at(0) > lhe_par_pt2->at(0)){
-       	jetLHEPartonpt_tmp[0] = lhe_par_pt1->at(0);
-    	jetLHEPartonpt_tmp[1] = lhe_par_pt2->at(0);
-    	jetLHEPartoneta_tmp[0] = lhe_par_eta1->at(0);
-    	jetLHEPartoneta_tmp[1] = lhe_par_eta2->at(0);
-	jetLHEPartonphi_tmp[0] = lhe_par_phi1->at(0);
-    	jetLHEPartonphi_tmp[1] = lhe_par_phi2->at(0);
-    	jetLHEPartonpid_tmp[0] = lhe_par_pid1->at(0);
-    	jetLHEPartonpid_tmp[1] = lhe_par_pid2->at(0);
-      }
-      else if(lhe_par_pt2->at(0) > lhe_par_pt1->at(0)){
-       	jetLHEPartonpt_tmp[0] = lhe_par_pt2->at(0);
-    	jetLHEPartonpt_tmp[1] = lhe_par_pt1->at(0);
-    	jetLHEPartoneta_tmp[0] = lhe_par_eta2->at(0);
-    	jetLHEPartoneta_tmp[1] = lhe_par_eta1->at(0);
-	jetLHEPartonphi_tmp[0] = lhe_par_phi2->at(0);
-    	jetLHEPartonphi_tmp[1] = lhe_par_phi1->at(0);
-    	jetLHEPartonpid_tmp[0] = lhe_par_pid2->at(0);
-    	jetLHEPartonpid_tmp[1] = lhe_par_pid1->at(0);
-      }
-       
-
-  
-	
-	
-      //--------- GenParticle Branches
-
-
-      vector< int> partonID;
-      vector< int> leptonID;
-      vector< int> neutrinoID;
-    
-      vector<GenParticle*> genParton;
-      vector<GenParticle*> genLepton;
-      vector<GenParticle*> genNeutrino;
-	
-      struct genParticleDescendingPt 
-      {
-	bool operator() (GenParticle* a, GenParticle* b) 
-	{     
-	  return a->PT > b->PT;
-	}
-      };
-    
-
-      int gen_entries = branchGenParticle->GetEntries();
-	
-      for(int k =0; k<4;k++){
-	jetGenPartonpt_tmp[k]=-99;
-	jetGenPartoneta_tmp[k]=-99;
-	jetGenPartonphi_tmp[k]=-99;
-	jetGenPartonpid_tmp[k]=-99;
-	leptonGenpt_tmp[k]=-99;
-	leptonGeneta_tmp[k]=-99;
-	leptonGenphi_tmp[k]=-99;
-	leptonGenpid_tmp[k]=-99;
-	neutrinoGenpt_tmp[k]=-99;
-	neutrinoGeneta_tmp[k]=-99;
-	neutrinoGenphi_tmp[k]=-99;
-	neutrinoGenpid_tmp[k]=-99;
-      }
-
-	
-	
-      for (int i = 0 ; i < gen_entries  ; i++) {
-	GenParticle *part = (GenParticle*) branchGenParticle->At(i);
-	int type   =  part-> PID;
 		
-
-	if ((type < 6 && type > -6) || type == 21) {
-	  partonID.push_back(i);
-	  genParton.push_back(part);
+      for(int k =0; k<4; k++){
+	leptonLHEpt_tmp[k]=-999;	leptonLHEeta_tmp[k]=-999;	leptonLHEphi_tmp[k]=-999;	 leptonLHEpid_tmp[k]=-999;	leptonLHEch_tmp[k]=-999;	leptonLHEm_tmp[k]=-999;
+	neutrinoLHEpt_tmp[k]=-999; neutrinoLHEeta_tmp[k]=-999;  neutrinoLHEphi_tmp[k]=-999;  neutrinoLHEpid_tmp[k]=-999;
+	jetLHEPartonpt_tmp[k]=-999; jetLHEPartoneta_tmp[k]=-999; jetLHEPartonphi_tmp[k]=-999; jetLHEPartonpid_tmp[k]=-999;
+	jetLHEGluonpt_tmp[k]=-999;  jetLHEGluoneta_tmp[k]=-999;  jetLHEGluonphi_tmp[k]=-999;  jetLHEGluonpid_tmp[k]=-999;
+	vbosonLHEpt_tmp[k]=-999;  vbosonLHEeta_tmp[k]=-999;  vbosonLHEphi_tmp[k]=-999;  vbosonLHEpid_tmp[k]=-999; vbosonLHEch_tmp[k]=-999;  vbosonLHEm_tmp[k]=-999;
+      }
+        
+        
+      int lhe_entries = branchLHEParticle->GetEntriesFast();
+        
+        
+        
+      for (int i = 0 ; i < lhe_entries  ; i++) {
+	LHEParticle *lhepart = (LHEParticle*) branchLHEParticle->At(i);
+	int type   =  lhepart-> PID;
+	int status =  lhepart-> Status;
+            
+	// no incoming particle
+	if(status == -1) continue;
+            
+            
+	if (type < 6 && type > -6) {
+	  lhepartonID.push_back(i);
+	  lheParton.push_back(lhepart);
 	}
-			
+            
+	if (type == 21) {
+	  lhegluonID.push_back(i);
+	  lheGluon.push_back(lhepart);
+	}
+            
+	if (type == 24 || type ==-24 || type == 23 ) {
+	  lhevbosonID.push_back(i);
+	  lheVBoson.push_back(lhepart);
+	}
+            
 	if (type == 11 || type == 13 || type == 15 ||type == -11 || type == -13 || type == -15 ) {
-	  leptonID.push_back(i);
-	  genLepton.push_back(part);
+	  lheleptonID.push_back(i);
+	  lheLepton.push_back(lhepart);
 	}
-			
+            
 	if (type == 12 || type == 14 || type == 16 ||type == -12 || type == -14 || type == -16 ) {
-	  neutrinoID.push_back(i);
-	  genNeutrino.push_back(part);
+	  lheneutrinoID.push_back(i);
+	  lheNeutrino.push_back(lhepart);
 	}
-
-      }
-
-      sort(genParton.begin(), genParton.end(),genParticleDescendingPt());
-      sort(genLepton.begin(), genLepton.end(),genParticleDescendingPt());
-      sort(genNeutrino.begin(), genNeutrino.end(),genParticleDescendingPt());
-			
-			
-      int jp = (partonID.size()<4) ? partonID.size():4;
-      int jl = (leptonID.size()<4) ? leptonID.size():4;
-      int jn = (neutrinoID.size()<4) ? neutrinoID.size():4;
-			
-      for(int j=0; j<jp; j++){
-	jetGenPartonpt_tmp[j] = genParton.at(j)->PT;
-	jetGenPartoneta_tmp[j] = genParton.at(j)->Eta;
-	jetGenPartonphi_tmp[j] = genParton.at(j)->Phi;
-	jetGenPartonpid_tmp[j] = genParton.at(j)->PID;
-      }
-			
-      for(int j=0; j<jl; j++){
-	leptonGenpt_tmp[j] = genLepton.at(j)->PT;
-	leptonGeneta_tmp[j] = genLepton.at(j)->Eta;
-	leptonGenphi_tmp[j] = genLepton.at(j)->Phi;
-	leptonGenpid_tmp[j] = genLepton.at(j)->PID;
-
-      }
-			
-      for(int j=0; j<jn; j++){
-	neutrinoGenpt_tmp[j] = genNeutrino.at(j)->PT;
-	neutrinoGeneta_tmp[j] = genNeutrino.at(j)->Eta;
-	neutrinoGenphi_tmp[j] = genNeutrino.at(j)->Phi;
-	neutrinoGenpid_tmp[j] = genNeutrino.at(j)->PID;
-      }
-			
-			
-      //--------- Gen Jet branches
-	
-      numbergenjet_tmp = branchGenJet->GetEntriesFast();
-      ngenjet_tmp=0;
-      ngenjetid_tmp=0;
-	
-    
-      for(int k =0; k<4;k++){
-    	jetGenpt_tmp[k]=-99;	
-    	jetGeneta_tmp[k]=-99;	
-    	jetGenphi_tmp[k]=-99;	
-      }
-   	
-      ngenjet_tmp = numbergenjet_tmp;
-	
-      int Ngenjets = (numbergenjet_tmp < 4) ? numbergenjet_tmp : 4;
-      // taking maximally first 4 jets	
-      for(int i=0; i<Ngenjets; i++){ 
-	
-	Jet* genjet[njetid_tmp];
-    	
-	for(int ij =0; ij<ngenjetid_tmp;ij++){
-
-	  genjet[ij] = (Jet*) branchGenJet->At(ij);
-	  jetGeneta_tmp[ij] = genjet[ij]->Eta;
-	  jetGenpt_tmp[ij] = genjet[ij]->PT;
-	  jetGenphi_tmp[ij] = genjet[ij]->Phi;
+            
+	// sorting in PT
+            
+	sort(lheParton.begin(), lheParton.end(),lheParticleDescendingPt());
+	sort(lheLepton.begin(), lheLepton.end(),lheParticleDescendingPt());
+	sort(lheNeutrino.begin(), lheNeutrino.end(),lheParticleDescendingPt());
+	sort(lheGluon.begin(), lheGluon.end(),lheParticleDescendingPt());
+	sort(lheVBoson.begin(), lheVBoson.end(),lheParticleDescendingPt());
+            
+	int jl = (lheleptonID.size()<4) ? lheleptonID.size():4;
+	int jp = (lhepartonID.size()<4) ? lhepartonID.size():4;
+	int jn = (lheneutrinoID.size()<4) ? lheneutrinoID.size():4;
+	int jg = (lhegluonID.size()<2) ? lhegluonID.size():2;
+	int jb = (lhevbosonID.size()<2) ? lhevbosonID.size():2;
+            
+	for(int j=0; j<jp; j++){
+	  jetLHEPartonpt_tmp[j] = lheParton.at(j)->PT;
+	  jetLHEPartoneta_tmp[j] = lheParton.at(j)->Eta;
+	  jetLHEPartonphi_tmp[j] = lheParton.at(j)->Phi;
+	  jetLHEPartonpid_tmp[j] = lheParton.at(j)->PID;
+                
 	}
+            
+	for(int j=0; j<jg; j++){
+	  jetLHEGluonpt_tmp[j] = lheGluon.at(j)->PT;
+	  jetLHEGluoneta_tmp[j] = lheGluon.at(j)->Eta;
+	  jetLHEGluonphi_tmp[j] = lheGluon.at(j)->Phi;
+	  jetLHEGluonpid_tmp[j] = lheGluon.at(j)->PID;
+                
+	}
+			
+	for(int j=0; j<jl; j++){
+	  leptonLHEpt_tmp[j] = lheLepton.at(j)->PT;
+	  leptonLHEeta_tmp[j] = lheLepton.at(j)->Eta;
+	  leptonLHEphi_tmp[j] = lheLepton.at(j)->Phi;
+	  leptonLHEpid_tmp[j] = lheLepton.at(j)->PID;
+	  leptonLHEch_tmp[j] = lheLepton.at(j)->Charge;
+	  leptonLHEm_tmp[j] = lheLepton.at(j)->Mass;
+                
+	}
+            
+	for(int j=0; j<jb; j++){
+	  vbosonLHEpt_tmp[j] = lheVBoson.at(j)->PT;
+	  vbosonLHEeta_tmp[j] = lheVBoson.at(j)->Eta;
+	  vbosonLHEphi_tmp[j] = lheVBoson.at(j)->Phi;
+	  vbosonLHEpid_tmp[j] = lheVBoson.at(j)->PID;
+	  vbosonLHEch_tmp[j] = lheVBoson.at(j)->Charge;
+	  vbosonLHEm_tmp[j] = lheVBoson.at(j)->Mass;
+                
+	}
+			
+	for(int j=0; j<jn; j++){
+	  neutrinoLHEpt_tmp[j] = lheNeutrino.at(j)->PT;
+	  neutrinoLHEeta_tmp[j] = lheNeutrino.at(j)->Eta;
+	  neutrinoLHEphi_tmp[j] = lheNeutrino.at(j)->Phi;
+	  neutrinoLHEpid_tmp[j] = lheNeutrino.at(j)->PID;
+	}
+            
+            
+      }// lhe loop
+        
+        
+      //------ GEN JET Filling  -----------------//
+        
+      vector <Jet*> genJet;
+      vector <int> genJetIndex;
+		
+		
+
+		
+      for(int k =0; k<4; k++){
+	jetGenpt_tmp[k]=-999;
+	jetGeneta_tmp[k]=-999;
+	jetGenphi_tmp[k]=-999;
+	jetGenm_tmp[k]=-999;
+	jetGenAreaX_tmp[k]=-999;
+	jetGenAreaY_tmp[k]=-999;
+	jetGenAreaZ_tmp[k]=-999;
+	jetGenAreaT_tmp[k]=-999;
       }
 		
-	
-      //--------- jet branches
-	
-      numberjet_tmp = branchJet->GetEntriesFast();
-      int nbjetcounter=0;
-      njet_tmp=0;
-      njetid_tmp=0;
-      nbjet_tmp=0;
-    
-      for(int k =0; k<8;k++){
-    	jeteta_tmp[k]=-99;	
-    	jetpt_tmp[k]=-99;	
-    	jetphi_tmp[k]=-99;	
-    	jetmass_tmp[k]=-99;	
-      }
-   	
-      njet_tmp = numberjet_tmp;
-	
-      int Njets = (numberjet_tmp < 8) ? numberjet_tmp : 8;
-      // taking maximally first 8 jets	
-      for(int i=0; i<Njets; i++){ 
-	
-	Jet* jet0 = (Jet*) branchJet->At(i);
+      int gjet_entries = branchGenJet->GetEntriesFast();
 		
+      for (int i = 0 ; i < gjet_entries  ; i++) {
+	Jet *genjet = (Jet*) branchGenJet->At(i);
+	genJet.push_back(genjet);
+	genJetIndex.push_back(i);
+						
+			
+	int njetsgen = (genJetIndex.size()<4) ? genJetIndex.size():4;
+			
+	for(int j=0; j<njetsgen; j++){
+	  jetGenpt_tmp[j] = genJet.at(j)->PT;
+	  jetGeneta_tmp[j] = genJet.at(j)->Eta;
+	  jetGenphi_tmp[j] = genJet.at(j)->Phi;
+	  jetGenm_tmp[j] = genJet.at(j)->Mass;
+	  jetGenAreaX_tmp[j] = genJet.at(j)->AreaX;
+	  jetGenAreaY_tmp[j] = genJet.at(j)->AreaY;
+	  jetGenAreaZ_tmp[j] = genJet.at(j)->AreaZ;
+	  jetGenAreaT_tmp[j] = genJet.at(j)->AreaT;
+	}
+            
+			
+      }
+        
+        
+      //------ TRACK JET Filling  -----------------//
+        
+      vector <Jet*> trackJet;
+      vector <int> trackJetIndex;
+		
+    
+		
+      for(int k =0; k<8; k++){
+	jetGenpt_tmp[k]=-999;
+	jetGeneta_tmp[k]=-999;
+	jetGenphi_tmp[k]=-999;
+	jetGenm_tmp[k]=-999;
+	jetGenAreaX_tmp[k]=-999;
+	jetGenAreaY_tmp[k]=-999;
+	jetGenAreaZ_tmp[k]=-999;
+	jetGenAreaT_tmp[k]=-999;
+      }
+		
+      int tjet_entries = branchTrackJet->GetEntriesFast();
+		
+      for (int i = 0 ; i < tjet_entries  ; i++) {
+	Jet *trackjet = (Jet*) branchTrackJet->At(i);
+	trackJet.push_back(trackjet);
+	trackJetIndex.push_back(i);
+			
+						
+	int njetstrack = (trackJetIndex.size()<8) ? trackJetIndex.size():8;
+            
+			
+	for(int j=0; j<njetstrack; j++){
+	  jetGenpt_tmp[j] = trackJet.at(j)->PT;
+	  jetGeneta_tmp[j] = trackJet.at(j)->Eta;
+	  jetGenphi_tmp[j] = trackJet.at(j)->Phi;
+	  jetGenm_tmp[j] = trackJet.at(j)->Mass;
+	  jetGenAreaX_tmp[j] = trackJet.at(j)->AreaX;
+	  jetGenAreaY_tmp[j] = trackJet.at(j)->AreaY;
+	  jetGenAreaZ_tmp[j] = trackJet.at(j)->AreaZ;
+	  jetGenAreaT_tmp[j] = trackJet.at(j)->AreaT;
+                
+	}
+            
+			
+      }
+        
+        
+      //------  JET (JetPUID) Filling  -----------------//
+
+      vector <Jet*> puidJet;
+      vector <int> puidJetIndex;
+        
+      TLorentzVector jet1, jet2;
+      int inbjet = 0, injetid = 0;
+		
+      mjj_tmp=-999.; detajj_tmp=-999.; 
+      njet_tmp=-999; njetid_tmp=-999; nbjet_tmp=-999; hardbjpb_tmp=-999; softbjpb_tmp=-999;
+        
+      for(int k =0; k<8; k++){
+	jetpt_tmp[k]=-999;   jeteta_tmp[k]=-999;  jetphi_tmp[k]=-999;    jetmass_tmp[k]=-999;
+            
+	jetAreaX_tmp[k]=-999;   jetAreaY_tmp[k]=-999;   jetAreaZ_tmp[k]=-999;    jetAreaT_tmp[k]=-999;
+	jetBTagAlgo_tmp[k]=-999;  jetBTagDefault_tmp[k]=-999;  jetBTagPhysics_tmp[k]=-999;
+	jetBTagNearest2_tmp[k]=-999;  jetBTagNearest3_tmp[k]=-999;  jetBTagHeaviest_tmp[k]=-999;  
+	jetFlavourAlgo_tmp[k]=-999;   jetFlavourDefault_tmp[k]=-999; jetFlavourPhysics_tmp[k]=-999;
+	jetFlavourNearest2_tmp[k]=-999;  jetFlavourNearest3_tmp[k]=-999;  jetFlavourHeaviest_tmp[k]=-999;  
+            
+	jetptD_tmp[k]=-999;  jetptDNe_tmp[k]=-999; jetptDCh_tmp[k]=-999;
+	jetnNeutral_tmp[k]=-999;  jetnCharged_tmp[k]=-999;  jetneuEMfrac_tmp[k]=-999;  jetneuHadfrac_tmp[k]=-999;
+	jetbetaClassic_tmp[k]=-999; jetbetaClassicStar_tmp[k]=-999;    jetbeta_tmp[k]=-999;  jetbetaStar_tmp[k]=-999;
+	jetconstituents_tmp[k]=-999;  jetaxis2_tmp[k]=-999;
+      }
+        
+      int jet_entries = branchJet->GetEntriesFast();
+      njet_tmp = jet_entries;
+
+		
+      for (int i = 0 ; i < jet_entries  ; i++) {
+	Jet *puidjet = (Jet*) branchJet->At(i);
+	puidJet.push_back(puidjet);
+	puidJetIndex.push_back(i);
+			
+	if (puidjet->PT > 30) injetid++;
+	njetid_tmp = injetid;
+			
 	// using medium b tagging
+	// 0 no btag, 1 loose, 1 medium, 3 tight
 
-	if((jet0->BTag & (1 << 1)) &&  jet0->PT >10 && jet0->PT <30 )softbjpb_tmp = 1;
-	if((jet0->BTag & (1 << 1)) &&  jet0->PT >30 ){
+	if((puidjet->BTagAlgo == 2 ) &&  puidjet->PT >10 && puidjet->PT <30 )softbjpb_tmp = 1;
+	if((puidjet->BTagAlgo == 2) &&  puidjet->PT >30 ){
 	  hardbjpb_tmp = 1;
-	  nbjetcounter++;
+	  inbjet++;
 	}
-	nbjet_tmp = nbjetcounter;
-	// bjets are counted using hard b tag discriminator
+	nbjet_tmp = inbjet;
 
-		
-	if(jet0->PT < 30) continue;
-	njetid_tmp++;
-	    
-	    
-    	Jet* jet[njetid_tmp];
-    	
-	for(int ij =0; ij<njetid_tmp;ij++){
-
-	  jet[ij] = (Jet*) branchJet->At(ij);
-	  jeteta_tmp[ij] = jet[ij]->Eta;
-	  jetpt_tmp[ij] = jet[ij]->PT;
-	  jetphi_tmp[ij] = jet[ij]->Phi;
-	  jetmass_tmp[ij] = jet[ij]->Mass;
-
-	  if(njetid_tmp ==2){
-	    jet1.SetPtEtaPhiM(jetpt_tmp[0], jeteta_tmp[0],jetphi_tmp[0],0);
-	    jet2.SetPtEtaPhiM(jetpt_tmp[1], jeteta_tmp[1],jetphi_tmp[1],0);
-	    if (jetpt_tmp[1]==-99 || jeteta_tmp[1]==-99 || jetphi_tmp[1]==-99)  continue;
-	    detajj_tmp = fabs(jeteta_tmp[0] -jeteta_tmp[1]);
-	    mjj_tmp = (jet1 + jet2).M(); 
-	  }
+			
+			
+	int njetspuid = (puidJetIndex.size()<8) ? puidJetIndex.size():8;
+            
+			
+	for(int j=0; j<njetspuid; j++){
+	  jetpt_tmp[j] = puidJet.at(j)->PT;
+	  jeteta_tmp[j] = puidJet.at(j)->Eta;
+	  jetphi_tmp[j] = puidJet.at(j)->Phi;
+	  jetmass_tmp[j] = puidJet.at(j)->Mass;
+	  jetAreaX_tmp[j] = puidJet.at(j)->AreaX;
+	  jetAreaY_tmp[j] = puidJet.at(j)->AreaY;
+	  jetAreaZ_tmp[j] = puidJet.at(j)->AreaZ;
+	  jetAreaT_tmp[j] = puidJet.at(j)->AreaT;
+	  jetBTagAlgo_tmp[j] = puidJet.at(j)->BTagAlgo;
+	  jetBTagDefault_tmp[j] = puidJet.at(j)->BTagDefault;
+	  jetBTagPhysics_tmp[j] = puidJet.at(j)->BTagPhysics;
+	  jetBTagNearest2_tmp[j] = puidJet.at(j)->BTagNearest2;
+	  jetBTagNearest3_tmp[j] = puidJet.at(j)->BTagNearest3;
+	  jetBTagHeaviest_tmp[j] = puidJet.at(j)->BTagHeaviest;
+	  jetFlavourAlgo_tmp[j] = puidJet.at(j)->flavourAlgo;
+	  jetFlavourDefault_tmp[j] = puidJet.at(j)->flavourDefault;
+	  jetFlavourPhysics_tmp[j] = puidJet.at(j)->flavourPhysics;
+	  jetFlavourNearest2_tmp[j] = puidJet.at(j)->flavourNearest2;
+	  jetFlavourNearest3_tmp[j] = puidJet.at(j)->flavourNearest3;
+	  jetFlavourHeaviest_tmp[j] = puidJet.at(j)->flavourHeaviest;
+	  jetptD_tmp[j] = puidJet.at(j)->ptD;
+	  jetptDNe_tmp[j] = puidJet.at(j)->ptDNe;
+	  jetptDCh_tmp[j] = puidJet.at(j)->ptDCh;
+	  jetnNeutral_tmp[j] = puidJet.at(j)->nNeutral;
+	  jetnCharged_tmp[j] = puidJet.at(j)->nCharged;
+	  jetneuEMfrac_tmp[j] = puidJet.at(j)->neuEMfrac;
+	  jetneuHadfrac_tmp[j] = puidJet.at(j)->neuHadfrac;
+	  jetbetaClassic_tmp[j] = puidJet.at(j)->betaClassic;
+	  jetbetaClassicStar_tmp[j] = puidJet.at(j)->betaClassicStar;
+	  jetbeta_tmp[j] = puidJet.at(j)->beta;
+	  jetbetaStar_tmp[j] = puidJet.at(j)->betaStar;
+	  jetconstituents_tmp[j] = puidJet.at(j)->constituents;
 	}
+			 
+	if (njetspuid >= 2){
+	  jet1.SetPtEtaPhiM(jetpt_tmp[0], jeteta_tmp[0],jetphi_tmp[0],jetmass_tmp[0]);
+	  jet2.SetPtEtaPhiM(jetpt_tmp[1], jeteta_tmp[1],jetphi_tmp[1],jetmass_tmp[1]);
+	  detajj_tmp = fabs(jeteta_tmp[0] -jeteta_tmp[1]);
+	  mjj_tmp = (jet1 + jet2).M(); 
+	}
+            
+			
       }
+        
+        
+      //------  JET (Jetpuppi) Filling  -----------------//
+
+      vector <Jet*> puppiJet;
+      vector <int> puppiJetIndex;
+
+      TLorentzVector jet1puppi, jet2puppi;
+      int inbjetpuppi = 0, injetidpuppi = 0;
+
+      mjj_puppi_tmp=-999.; detajj_puppi_tmp=-999.;
+      njet_puppi_tmp=-999; njetid_puppi_tmp=-999; nbjet_puppi_tmp=-999; hardbjpb_puppi_tmp=-999; softbjpb_puppi_tmp=-999;
+
+      for(int k =0; k<8; k++){
+	jetpt_puppi_tmp[k]=-999;   jeteta_puppi_tmp[k]=-999;  jetphi_puppi_tmp[k]=-999;    jetmass_puppi_tmp[k]=-999;
     
+	jetAreaX_puppi_tmp[k]=-999;   jetAreaY_puppi_tmp[k]=-999;   jetAreaZ_puppi_tmp[k]=-999;    jetAreaT_puppi_tmp[k]=-999;
+	jetBTagAlgo_puppi_tmp[k]=-999;  jetBTagDefault_puppi_tmp[k]=-999;  jetBTagPhysics_puppi_tmp[k]=-999;
+	jetBTagNearest2_puppi_tmp[k]=-999;  jetBTagNearest3_puppi_tmp[k]=-999;  jetBTagHeaviest_puppi_tmp[k]=-999;
+	jetFlavourAlgo_puppi_tmp[k]=-999;   jetFlavourDefault_puppi_tmp[k]=-999; jetFlavourPhysics_puppi_tmp[k]=-999;
+	jetFlavourNearest2_puppi_tmp[k]=-999;  jetFlavourNearest3_puppi_tmp[k]=-999;  jetFlavourHeaviest_puppi_tmp[k]=-999;
+    
+	jetptD_puppi_tmp[k]=-999;  jetptDNe_puppi_tmp[k]=-999; jetptDCh_puppi_tmp[k]=-999;
+	jetnNeutral_puppi_tmp[k]=-999;  jetnCharged_puppi_tmp[k]=-999;  jetneuEMfrac_puppi_tmp[k]=-999;  jetneuHadfrac_puppi_tmp[k]=-999;
+	jetbetaClassic_puppi_tmp[k]=-999; jetbetaClassicStar_puppi_tmp[k]=-999;    jetbeta_puppi_tmp[k]=-999;  jetbetaStar_puppi_tmp[k]=-999;
+	jetconstituents_puppi_tmp[k]=-999;  jetaxis2_puppi_tmp[k]=-999;
+      }
+
+      int puppijet_entries = branchPuppiJet->GetEntriesFast();
+      njet_puppi_tmp = puppijet_entries;
+
+
+      for (int i = 0 ; i < puppijet_entries  ; i++) {
+	Jet *puppijet = (Jet*) branchPuppiJet->At(i);
+	puppiJet.push_back(puppijet);
+	puppiJetIndex.push_back(i);
+    
+	if (puppijet->PT > 30) injetidpuppi++;
+	njetid_puppi_tmp = injetidpuppi;
+    
+	// using medium b tagging
+	// 0 no btag, 1 loose, 1 medium, 3 tight
+    
+	if((puppijet->BTagAlgo == 2 ) &&  puppijet->PT >10 && puppijet->PT <30 )softbjpb_puppi_tmp = 1;
+        if((puppijet->BTagAlgo == 2) &&  puppijet->PT >30 ){
+	  hardbjpb_puppi_tmp = 1;
+	  inbjetpuppi++;
+        }
+	nbjet_puppi_tmp = inbjetpuppi;
+    
+    
+    
+	int njetspuppi = (puppiJetIndex.size()<8) ? puppiJetIndex.size():8;
+    
+    
+	for(int j=0; j<njetspuppi; j++){
+	  jetpt_puppi_tmp[j] = puppiJet.at(j)->PT;
+	  jeteta_puppi_tmp[j] = puppiJet.at(j)->Eta;
+	  jetphi_puppi_tmp[j] = puppiJet.at(j)->Phi;
+	  jetmass_puppi_tmp[j] = puppiJet.at(j)->Mass;
+	  jetAreaX_puppi_tmp[j] = puppiJet.at(j)->AreaX;
+	  jetAreaY_puppi_tmp[j] = puppiJet.at(j)->AreaY;
+	  jetAreaZ_puppi_tmp[j] = puppiJet.at(j)->AreaZ;
+	  jetAreaT_puppi_tmp[j] = puppiJet.at(j)->AreaT;
+	  jetBTagAlgo_puppi_tmp[j] = puppiJet.at(j)->BTagAlgo;
+	  jetBTagDefault_puppi_tmp[j] = puppiJet.at(j)->BTagDefault;
+	  jetBTagPhysics_puppi_tmp[j] = puppiJet.at(j)->BTagPhysics;
+	  jetBTagNearest2_puppi_tmp[j] = puppiJet.at(j)->BTagNearest2;
+	  jetBTagNearest3_puppi_tmp[j] = puppiJet.at(j)->BTagNearest3;
+	  jetBTagHeaviest_puppi_tmp[j] = puppiJet.at(j)->BTagHeaviest;
+	  jetFlavourAlgo_puppi_tmp[j] = puppiJet.at(j)->flavourAlgo;
+	  jetFlavourDefault_puppi_tmp[j] = puppiJet.at(j)->flavourDefault;
+	  jetFlavourPhysics_puppi_tmp[j] = puppiJet.at(j)->flavourPhysics;
+	  jetFlavourNearest2_puppi_tmp[j] = puppiJet.at(j)->flavourNearest2;
+	  jetFlavourNearest3_puppi_tmp[j] = puppiJet.at(j)->flavourNearest3;
+	  jetFlavourHeaviest_puppi_tmp[j] = puppiJet.at(j)->flavourHeaviest;
+	  jetptD_puppi_tmp[j] = puppiJet.at(j)->ptD;
+	  jetptDNe_puppi_tmp[j] = puppiJet.at(j)->ptDNe;
+	  jetptDCh_puppi_tmp[j] = puppiJet.at(j)->ptDCh;
+	  jetnNeutral_puppi_tmp[j] = puppiJet.at(j)->nNeutral;
+	  jetnCharged_puppi_tmp[j] = puppiJet.at(j)->nCharged;
+	  jetneuEMfrac_puppi_tmp[j] = puppiJet.at(j)->neuEMfrac;
+	  jetneuHadfrac_puppi_tmp[j] = puppiJet.at(j)->neuHadfrac;
+	  jetbetaClassic_puppi_tmp[j] = puppiJet.at(j)->betaClassic;
+	  jetbetaClassicStar_puppi_tmp[j] = puppiJet.at(j)->betaClassicStar;
+	  jetbeta_puppi_tmp[j] = puppiJet.at(j)->beta;
+	  jetbetaStar_puppi_tmp[j] = puppiJet.at(j)->betaStar;
+	  jetconstituents_puppi_tmp[j] = puppiJet.at(j)->constituents;
+	}
+    
+	if (njetspuppi >= 2){
+	  jet1puppi.SetPtEtaPhiM(jetpt_puppi_tmp[0], jeteta_puppi_tmp[0],jetphi_puppi_tmp[0],jetmass_puppi_tmp[0]);
+	  jet2puppi.SetPtEtaPhiM(jetpt_puppi_tmp[1], jeteta_puppi_tmp[1],jetphi_puppi_tmp[1],jetmass_puppi_tmp[1]);
+	  detajj_puppi_tmp = fabs(jeteta_puppi_tmp[0] -jeteta_puppi_tmp[1]);
+	  mjj_puppi_tmp = (jet1puppi + jet2puppi).M();
+	}
+    
+    
+      }
+
+
+
+      //-------------LEPTON Filling-----------------//
+
+      nextra_tmp=-999; sameflav_tmp=-999; nlepton_tmp=-999;
+      channel_tmp=-999;	//0 mumu, 1 elel, 2 elmu, 3 muel
+      mll_tmp = -999.;  PTll_tmp = -999. ; dPhill_tmp = -999. ; dRll_tmp = -999. ; dEtall_tmp = -999. ; etall_tmp = -999. ; yll_tmp = -999. ; 
+
+
+      for(int k =0; k<4; k++){
+	pt_tmp[k]=-999.; eta_tmp[k]=-999.;	phi_tmp[k]=-999.; iso_tmp[k]=-999;  
+	isoDBeta_tmp[k]=-999;  isoRhoCorr_tmp[k]=-999;   sumChargedHadron_tmp[k]=-999; sumNeutral_tmp[k]=-999; 
+	sumChargedPU_tmp[k]=-999;  sumAllParticles_tmp[k]=-999;
+      }
+	
+	
+      vector <Lepton> leptonvec;
+
+      TLorentzVector lep1, lep2;
+
+      //default isolation is calculated using DBeta Correction
+
+      for(int i =0; i<branchEl->GetEntries();i++){
+	Electron* elec = (Electron*) branchEl->At(i);
+	Lepton l;
+	l.lpt = elec->PT;
+	l.type = 0;
+	l.index = i;
+	l.leta = elec->Eta;
+	l.lphi =elec->Phi;
+	l.lch = elec->Charge;
+	l.liso =  elec->IsolationVarDBeta;
+	l.lisoDBeta = elec->IsolationVarDBeta;
+	l.lisoRhoCorr = elec->IsolationVarRhoCorr;
+	l.lsumChargedHadron = elec->chargedHadronEnergy;
+	l.lsumNeutral = elec->neutralEnergy;
+	l.lsumChargedPU =  elec->chargedPUEnergy;
+	l.lsumAllParticles = elec->allParticleEnergy;
+	leptonvec.push_back(l);
+      }
+
+      for(int i =0; i<branchMu->GetEntries();i++){
+	Muon* muo = (Muon*) branchMu->At(i);
+	Lepton l;
+	l.type = 1;
+	l.index = i;
+	l.lpt = muo->PT;
+	l.leta = muo->Eta;
+	l.lphi =muo->Phi;
+	l.lch = muo->Charge;
+	l.liso =  muo->IsolationVarDBeta;
+	l.lisoDBeta = muo->IsolationVarDBeta;
+	l.lisoRhoCorr = muo->IsolationVarRhoCorr;
+	l.lsumChargedHadron = muo->chargedHadronEnergy;
+	l.lsumNeutral = muo->neutralEnergy;
+	l.lsumChargedPU =  muo->chargedPUEnergy;
+	l.lsumAllParticles = muo->allParticleEnergy;
+	leptonvec.push_back(l);
+      }
+
+	
+      // sorting leptons in pt
+      sort(leptonvec.begin(),leptonvec.end(),leptonDescendingPt());
+	
+
+      for(int i =0; i<leptonvec.size(); i++){
+	pt_tmp[i] = leptonvec.at(i).lpt;
+	eta_tmp[i] = leptonvec.at(i).leta;
+	phi_tmp[i] = leptonvec.at(i).lphi;
+	ch_tmp[i] = leptonvec.at(i).lch;
+	iso_tmp[i] = leptonvec.at(i).liso;
+	isoDBeta_tmp[i] = leptonvec.at(i).lisoDBeta;
+	isoRhoCorr_tmp[i] = leptonvec.at(i).lisoRhoCorr;
+	sumChargedHadron_tmp[i] = leptonvec.at(i).lsumChargedHadron;
+	sumNeutral_tmp[i] = leptonvec.at(i).lsumNeutral;
+	sumChargedPU_tmp[i] = leptonvec.at(i).lsumChargedPU;
+	sumAllParticles_tmp[i] = leptonvec.at(i).lsumAllParticles;
+      }
+	
+
+      nlepton_tmp = leptonvec.size();
+	
+      //getting nextra leptons
+      if(nlepton_tmp >= 2) nextra_tmp = nlepton_tmp - 2;
+	
+
+
+      if(nlepton_tmp >= 2){
+	lep1.SetPtEtaPhiM(pt_tmp[0], eta_tmp[0],phi_tmp[0],0);
+	lep2.SetPtEtaPhiM(pt_tmp[1], eta_tmp[1],phi_tmp[1],0);
+	mll_tmp = (lep1 + lep2).M(); 
+	PTll_tmp = pt_tmp[0] + pt_tmp[1];
+	dPhill_tmp = DeltaPhi(phi_tmp[0], phi_tmp[1]);
+	dRll_tmp = DeltaR(eta_tmp[0], eta_tmp[1], phi_tmp[0], phi_tmp[1]);
+	dEtall_tmp = fabs(eta_tmp[0] - eta_tmp[1]);
+	etall_tmp = eta_tmp[0] + eta_tmp[1];
+	yll_tmp = (lep1 + lep2).Rapidity(); 
+	//channel info
+	if(leptonvec.at(0).type == 0 && leptonvec.at(1).type ==1 ){
+	  channel_tmp = 2;
+	  sameflav_tmp =0;
+	}
+	if(leptonvec.at(0).type == 1 && leptonvec.at(1).type ==0 ){
+	  channel_tmp = 3;
+	  sameflav_tmp =0;
+	}
+	if(leptonvec.at(0).type == 0 && leptonvec.at(1).type ==0 ){
+	  channel_tmp = 1;
+	  sameflav_tmp =1;
+	}
+	if(leptonvec.at(0).type == 1 && leptonvec.at(1).type ==1 ){
+	  channel_tmp = 0;
+	  sameflav_tmp =1;
+	}
+			
+      }
+		
+   
+        
       //--------- MET BRANCHES
     	
+      pfmet_tmp=-999; pfmetphi_tmp=-999;
       MissingET* met = (MissingET*) branchMET->At(0);
       pfmet_tmp = met->MET;
       pfmetphi_tmp = met->Phi;
 		
       //--------- GEN MET BRANCHES
+      metGenpt_tmp=-999;  metGenphi_tmp=-999;
       MissingET* genmet = (MissingET*) branchGenMET->At(0);
       metGenpt_tmp = genmet->MET;
       metGenphi_tmp = genmet->Phi;
-
+        
       //--------- MET BRANCHES
     	
+      pfmet_puppi_tmp=-999; pfmetphi_puppi_tmp=-999;
       MissingET* puppimet = (MissingET*) branchPuppiMET->At(0);
       pfmet_puppi_tmp = puppimet->MET;
       pfmetphi_puppi_tmp = puppimet->Phi;
 		
-		
-
-		
-		
-      //--------- Puppi Jet Branches
-	
-      numberjet_puppi_tmp = branchPuppiJet->GetEntriesFast();
-      int nbjetcounter_puppi=0;
-      njet_puppi_tmp=0;
-      njetid_puppi_tmp=0;
-      nbjet_puppi_tmp=0;
-    
-      for(int k =0; k<8;k++){
-    	jeteta_puppi_tmp[k]=-99;	
-    	jetpt_puppi_tmp[k]=-99;	
-    	jetphi_puppi_tmp[k]=-99;	
-    	jetmass_puppi_tmp[k]=-99;	
-      }
-   	
-      njet_puppi_tmp = numberjet_puppi_tmp;
-	
-
-      int Njets_puppi = (numberjet_puppi_tmp < 8) ? numberjet_puppi_tmp : 8;
-      // taking maximally first 8 jets	
-      for(int i=0; i<Njets_puppi; i++){ 
-	
-	Jet* jet0 = (Jet*) branchPuppiJet->At(i);
-		
-	if((jet0->BTag & (1 << 1)) &&  jet0->PT >30 )hardbjpb_puppi_tmp = 1;
-	if((jet0->BTag & (1 << 1)) &&  jet0->PT >10 && jet0->PT <30 )softbjpb_puppi_tmp = 1;
-	// not sure about this definition
-		
-	if(jet0->PT < 30) continue;
-	njetid_puppi_tmp++;
-	    
-	if(jet0->BTag & (1 << 1)) {nbjetcounter_puppi++;}
-	nbjet_puppi_tmp = nbjet_puppi_tmp;
-	//no b puppi jets?
-	    
-    	
-    	Jet* jet[njetid_puppi_tmp];
-    	
-	for(int ij =0; ij<njetid_puppi_tmp;ij++){
-	    
-	  jet[ij] = (Jet*) branchJet->At(ij);
-	  jeteta_puppi_tmp[ij] = jet[ij]->Eta;
-	  jetpt_puppi_tmp[ij] = jet[ij]->PT;
-	  jetphi_puppi_tmp[ij] = jet[ij]->Phi;
-	  jetmass_puppi_tmp[ij] = jet[ij]->Mass;
-    	    
-	  if(njetid_puppi_tmp ==2){
-	    jet1.SetPtEtaPhiM(jetpt_puppi_tmp[0], jeteta_puppi_tmp[0],jetphi_puppi_tmp[0],0);
-	    jet2.SetPtEtaPhiM(jetpt_puppi_tmp[1], jeteta_puppi_tmp[1],jetphi_puppi_tmp[1],0);
-	    if (jetpt_puppi_tmp[1]==-99 || jeteta_puppi_tmp[1]==-99 || jetphi_puppi_tmp[1]==-99)  continue;
-	    detajj_puppi_tmp = fabs(jeteta_puppi_tmp[0] -jeteta_puppi_tmp[1]);
-	    mjj_puppi_tmp = (jet1 + jet2).M(); 
-
-	  }
-			
-		
-	}
-			
-			
-	        
-      }
-    
-
-		
+        
       easyTree -> Fill();
-
-	
+		
     }
+    
 	
-
-  easyTree -> Print("easyDelphes");
+	
+  //easyTree -> Print("easyDelphes");
   outputFile -> Write();
   delete outputFile;
 }
 
 
-	
+
+
+
 
 
 
