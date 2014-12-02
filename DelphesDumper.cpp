@@ -601,66 +601,71 @@ int main (int argc, char *argv[])
 	  lheneutrinoID.push_back(i);
 	  lheNeutrino.push_back(lhepart);
 	}
+      } //lheloop
+      
             
-	// sorting in PT
+      // sorting in PT
             
-	sort(lheParton.begin(), lheParton.end(),lheParticleDescendingPt());
-	sort(lheLepton.begin(), lheLepton.end(),lheParticleDescendingPt());
-	sort(lheNeutrino.begin(), lheNeutrino.end(),lheParticleDescendingPt());
-	sort(lheGluon.begin(), lheGluon.end(),lheParticleDescendingPt());
-	sort(lheVBoson.begin(), lheVBoson.end(),lheParticleDescendingPt());
+      sort(lheParton.begin(), lheParton.end(),lheParticleDescendingPt());
+      sort(lheLepton.begin(), lheLepton.end(),lheParticleDescendingPt());
+      sort(lheNeutrino.begin(), lheNeutrino.end(),lheParticleDescendingPt());
+      sort(lheGluon.begin(), lheGluon.end(),lheParticleDescendingPt());
+      sort(lheVBoson.begin(), lheVBoson.end(),lheParticleDescendingPt());
             
-	int jl = (lheleptonID.size()<4) ? lheleptonID.size():4;
-	int jp = (lhepartonID.size()<4) ? lhepartonID.size():4;
-	int jn = (lheneutrinoID.size()<4) ? lheneutrinoID.size():4;
-	int jg = (lhegluonID.size()<2) ? lhegluonID.size():2;
-	int jb = (lhevbosonID.size()<2) ? lhevbosonID.size():2;
+      int jl = (lheleptonID.size()<4) ? lheleptonID.size():4;
+      int jp = (lhepartonID.size()<4) ? lhepartonID.size():4;
+      int jn = (lheneutrinoID.size()<4) ? lheneutrinoID.size():4;
+      int jg = (lhegluonID.size()<2) ? lhegluonID.size():2;
+      int jb = (lhevbosonID.size()<2) ? lhevbosonID.size():2;
             
-	for(int j=0; j<jp; j++){
-	  jetLHEPartonpt_tmp[j] = lheParton.at(j)->PT;
-	  jetLHEPartoneta_tmp[j] = lheParton.at(j)->Eta;
-	  jetLHEPartonphi_tmp[j] = lheParton.at(j)->Phi;
-	  jetLHEPartonpid_tmp[j] = lheParton.at(j)->PID;
+      for(int j=0; j<jp; j++){
+	jetLHEPartonpt_tmp[j] = lheParton.at(j)->PT;
+	jetLHEPartoneta_tmp[j] = lheParton.at(j)->Eta;
+	jetLHEPartonphi_tmp[j] = lheParton.at(j)->Phi;
+	jetLHEPartonpid_tmp[j] = lheParton.at(j)->PID;
                 
-	}
+      }
             
-	for(int j=0; j<jg; j++){
-	  jetLHEGluonpt_tmp[j] = lheGluon.at(j)->PT;
-	  jetLHEGluoneta_tmp[j] = lheGluon.at(j)->Eta;
-	  jetLHEGluonphi_tmp[j] = lheGluon.at(j)->Phi;
-	  jetLHEGluonpid_tmp[j] = lheGluon.at(j)->PID;
+      for(int j=0; j<jg; j++){
+	jetLHEGluonpt_tmp[j] = lheGluon.at(j)->PT;
+	jetLHEGluoneta_tmp[j] = lheGluon.at(j)->Eta;
+	jetLHEGluonphi_tmp[j] = lheGluon.at(j)->Phi;
+	jetLHEGluonpid_tmp[j] = lheGluon.at(j)->PID;
                 
-	}
+      }
+
+      for(int j=0; j<jl; j++){
+	leptonLHEpt_tmp[j] = lheLepton.at(j)->PT;
+	leptonLHEeta_tmp[j] = lheLepton.at(j)->Eta;
+	leptonLHEphi_tmp[j] = lheLepton.at(j)->Phi;
+	leptonLHEpid_tmp[j] = lheLepton.at(j)->PID;
+	leptonLHEch_tmp[j] = lheLepton.at(j)->Charge;
+	leptonLHEm_tmp[j] = lheLepton.at(j)->Mass;
+                
+      }
+	
+	
+
+            
+      for(int j=0; j<jb; j++){
+	vbosonLHEpt_tmp[j] = lheVBoson.at(j)->PT;
+	vbosonLHEeta_tmp[j] = lheVBoson.at(j)->Eta;
+	vbosonLHEphi_tmp[j] = lheVBoson.at(j)->Phi;
+	vbosonLHEpid_tmp[j] = lheVBoson.at(j)->PID;
+	vbosonLHEch_tmp[j] = lheVBoson.at(j)->Charge;
+	vbosonLHEm_tmp[j] = lheVBoson.at(j)->Mass;
+                
+      }
 			
-	for(int j=0; j<jl; j++){
-	  leptonLHEpt_tmp[j] = lheLepton.at(j)->PT;
-	  leptonLHEeta_tmp[j] = lheLepton.at(j)->Eta;
-	  leptonLHEphi_tmp[j] = lheLepton.at(j)->Phi;
-	  leptonLHEpid_tmp[j] = lheLepton.at(j)->PID;
-	  leptonLHEch_tmp[j] = lheLepton.at(j)->Charge;
-	  leptonLHEm_tmp[j] = lheLepton.at(j)->Mass;
-                
-	}
-            
-	for(int j=0; j<jb; j++){
-	  vbosonLHEpt_tmp[j] = lheVBoson.at(j)->PT;
-	  vbosonLHEeta_tmp[j] = lheVBoson.at(j)->Eta;
-	  vbosonLHEphi_tmp[j] = lheVBoson.at(j)->Phi;
-	  vbosonLHEpid_tmp[j] = lheVBoson.at(j)->PID;
-	  vbosonLHEch_tmp[j] = lheVBoson.at(j)->Charge;
-	  vbosonLHEm_tmp[j] = lheVBoson.at(j)->Mass;
-                
-	}
-			
-	for(int j=0; j<jn; j++){
-	  neutrinoLHEpt_tmp[j] = lheNeutrino.at(j)->PT;
-	  neutrinoLHEeta_tmp[j] = lheNeutrino.at(j)->Eta;
-	  neutrinoLHEphi_tmp[j] = lheNeutrino.at(j)->Phi;
-	  neutrinoLHEpid_tmp[j] = lheNeutrino.at(j)->PID;
-	}
+      for(int j=0; j<jn; j++){
+	neutrinoLHEpt_tmp[j] = lheNeutrino.at(j)->PT;
+	neutrinoLHEeta_tmp[j] = lheNeutrino.at(j)->Eta;
+	neutrinoLHEphi_tmp[j] = lheNeutrino.at(j)->Phi;
+	neutrinoLHEpid_tmp[j] = lheNeutrino.at(j)->PID;
+      }
             
             
-      }// lhe loop
+     
         
         
       //------ GEN JET Filling  -----------------//
