@@ -295,8 +295,8 @@ int main (int argc, char *argv[])
   //--------- TRACK JETS Information
   int ntjet=8;
 	
-  float jetTrackpt_tmp[ngjet], jetTracketa_tmp[ngjet], jetTrackphi_tmp[ngjet],  jetTrackm_tmp[ngjet] ;
-  float jetTrackAreaX_tmp[ngjet], jetTrackAreaY_tmp[ngjet], jetTrackAreaZ_tmp[ngjet], jetTrackAreaT_tmp[ngjet];
+  float jetTrackpt_tmp[ntjet], jetTracketa_tmp[ntjet], jetTrackphi_tmp[ntjet],  jetTrackm_tmp[ntjet] ;
+  float jetTrackAreaX_tmp[ntjet], jetTrackAreaY_tmp[ntjet], jetTrackAreaZ_tmp[ntjet], jetTrackAreaT_tmp[ntjet];
 	
 	
   for(int ijet = 0; ijet<ntjet; ijet++){
@@ -512,9 +512,9 @@ int main (int argc, char *argv[])
   int channel_tmp;	//0 mumu, 1 elel, 2 elmu, 3 muel
   float mll_tmp,  PTll_tmp, dPhill_tmp, dRll_tmp, dEtall_tmp, etall_tmp, yll_tmp;
 
-  float pt_tmp[nlhe], eta_tmp[nlhe], phi_tmp[nlhe], iso_tmp[nlep], isoDBeta_tmp[nlep], isoRhoCorr_tmp[nlep] ;
+  float pt_tmp[nlep], eta_tmp[nlep], phi_tmp[nlep], iso_tmp[nlep], isoDBeta_tmp[nlep], isoRhoCorr_tmp[nlep] ;
   float sumChargedHadron_tmp[nlep], sumNeutral_tmp[nlep], sumChargedPU_tmp[nlep], sumAllParticles_tmp[nlep];
-  double  ch_tmp[nlhe];
+  double  ch_tmp[nlep];
 
   easyTree -> Branch("mll",&mll_tmp,"mll/F");
   easyTree -> Branch("PTll",&PTll_tmp,"PTll/F");
@@ -528,7 +528,7 @@ int main (int argc, char *argv[])
   easyTree -> Branch("sameflav",&sameflav_tmp,"sameflav/I");
   easyTree -> Branch("channel",&channel_tmp,"channel/I");
 
-  for(int ilep =0; ilep<nlhe; ilep++){
+  for(int ilep =0; ilep<nlep; ilep++){
     TString ptStr = "pt"; ptStr += (ilep+1);
     TString etaStr = "eta"; etaStr += (ilep+1);
     TString phiStr = "phi"; phiStr += (ilep+1);
@@ -536,7 +536,7 @@ int main (int argc, char *argv[])
     TString isoStr = "iso"; isoStr += (ilep+1);
     TString isoDBetaStr = "isoDBeta"; isoDBetaStr += (ilep+1);
     TString isoRhoCorrStr = "isoRhoCorr"; isoRhoCorrStr += (ilep+1);
-    TString sumChargedHadronStr = "sumChargedHadron"; sumChargedHadronStr += (ilep+1);
+    TStritng sumChargedHadronStr = "sumChargedHadron"; sumChargedHadronStr += (ilep+1);
     TString sumNeutralStr = "sumNeutral"; sumNeutralStr += (ilep+1);
     TString sumChargedPUStr = "sumChargedPU"; sumChargedPUStr += (ilep+1);
     TString sumAllParticlesStr = "sumAllParticles"; sumAllParticlesStr += (ilep+1);

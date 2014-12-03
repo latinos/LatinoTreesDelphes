@@ -1,0 +1,78 @@
+LHE Objects: first 4 lepton, neutrino, parton info and 2 vector boson info are stored stored
+
+ m: mass
+ ch: charge
+
+ leptonLHEpt , leptonLHEeta , leptonLHEphi , leptonLHEpid , leptonLHEch , leptonLHEm  ;
+  neutrinoLHEpt , neutrinoLHEeta , neutrinoLHEphi , neutrinoLHEpid ;
+  jetLHEPartonpt , jetLHEPartoneta , jetLHEPartonphi , jetLHEPartonpid ;
+  jetLHEGluonpt , jetLHEGluoneta , jetLHEGluonphi , jetLHEGluonpid , jetLHEGluonch  ;
+  vbosonLHEpt , vbosonLHEeta , vbosonLHEphi , vbosonLHEpid , vbosonLHEch ,vbosonLHEm  ;
+
+Gen Particles: first 4 leptons are stored
+
+   leptonGenpt   leptonGenpid    leptonGenphi   leptonGeneta  
+   neutrinoGenpt    neutrinoGenpid   neutrinoGenphi    neutrinoGeneta  
+
+
+Gen Jets: First 4 highest Pt Jets are stored
+
+  jetGenpt , jetGeneta , jetGenphi ,  jetGenm  ;
+  jetGenAreaX , jetGenAreaY , jetGenAreaZ , jetGenAreaT ;
+
+Track Jets: First 4 highest Pt Jets are stored 
+
+  jetTrackpt  , jetTracketa  , jetTrackphi  ,  jetTrackm   ;
+  jetTrackAreaX  , jetTrackAreaY  , jetTrackAreaZ  , jetTrackAreaT  ;
+
+PUID Jets, Puppi Jets: First 8 sorted in Pt are stored. The same also for puppi jets with a puppi tag
+
+   jeteta  , jetphi  , jetpt  ,  jetmass   ;
+   jetAreaX  , jetAreaY  , jetAreaZ  , jetAreaT  ;
+   jetBTagAlgo  , jetBTagDefault  ,jetBTagPhysics  , jetBTagNearest2  , jetBTagNearest3  , jetBTagHeaviest   ;
+   jetFlavourAlgo  , jetFlavourDefault  ,jetFlavourPhysics  , jetFlavourNearest2  , jetFlavourNearest3  , jetFlavourHeaviest  ;
+   jetptD  , jetptDNe  , jetptDCh  ;
+   jetnNeutral  , jetnCharged  , jetneuEMfrac  , jetneuHadfrac  ;
+   jetbetaClassic  ,jetbetaClassicStar  , jetbeta  , jetbetaStar  , jetconstituents  , jetaxis2  ;
+   mjj  , detajj  ; 
+   njet  , njetid  , nbjet  , hardbjpb  , softbjpb  ;
+
+Lepton: First 4 lepton sorted in Pt are stored
+
+ nextra  , sameflav  , nlepton  ;
+  channel  ;	//0 mumu, 1 elel, 2 elmu, 3 muel
+  mll  ,  PTll  , dPhill  , dRll  , dEtall  , etall  , yll  ;
+  pt     , eta     , phi     , iso    , isoDBeta    , isoRhoCorr     ;
+  sumChargedHadron    , sumNeutral    , sumChargedPU    , sumAllParticles    ;
+  ch     ;
+
+MET:
+ pfmet   , pfmetphi   ;
+ metGenpt   , metGenphi   ;
+ pfmet_puppi   , pfmetphi_puppi   ;
+
+NPU 
+
+Rho:
+ globalRhokt4    ;
+ globalRhoGridFastJet    ;
+
+ Rhokt4_0:	   eta = 0 and eta = 2.5 range
+ Rhokt4_1:   eta = 2.5 and eta = 4 range
+ Rhokt4_2:   eta = 4 and eta = 5 range
+
+The same for RhoGridFastJet, 3 Rho values for 3 eta ranges
+
+PuppiRhoKt4_
+  // 0: eta = 0 and eta = 2.5 range
+  // 1: eta = 2.5 and eta = 5 range
+
+RhoGridFastJet
+  // 0: eta = 0 and eta = 2.5 range
+  // 1: eta = 2.5 and eta = 5 range
+  
+
+
+
+
+
