@@ -227,9 +227,7 @@ int main (int argc, char *argv[])
     easyTree -> Branch(jetLHEGluonetaStr,&jetLHEGluoneta_tmp[ilhe],jetLHEGluonetaStr+"/F");
     easyTree -> Branch(jetLHEGluonphiStr,&jetLHEGluonphi_tmp[ilhe],jetLHEGluonphiStr+"/F");
     easyTree -> Branch(jetLHEGluonpidStr,&jetLHEGluonpid_tmp[ilhe],jetLHEGluonpidStr+"/F");
-		
-        
-        
+	            
   }
   
   //------Gen Particles  
@@ -378,7 +376,6 @@ int main (int argc, char *argv[])
     TString jetbetaStarStr = "jetbetaStar"; jetbetaStarStr += (ijet+1);
     TString jetconstituentsStr = "jetconstituents"; jetconstituentsStr += (ijet+1);
     TString jetaxis2Str = "jetaxis2_"; jetaxis2Str += (ijet+1);
-        
         
     easyTree -> Branch(jetptStr,&jetpt_tmp[ijet],jetptStr+"/F");
     easyTree -> Branch(jetetaStr,&jeteta_tmp[ijet],jetetaStr+"/F");
@@ -653,8 +650,6 @@ int main (int argc, char *argv[])
       vector<LHEParticle*> lheNeutrino;
       vector<LHEParticle*> lheVBoson;
         
-      
-		
       for(int k =0; k<4; k++){
 	leptonLHEpt_tmp[k]=-999;	leptonLHEeta_tmp[k]=-999;	leptonLHEphi_tmp[k]=-999;	 leptonLHEpid_tmp[k]=-999;	leptonLHEch_tmp[k]=-999;	leptonLHEm_tmp[k]=-999;
 	neutrinoLHEpt_tmp[k]=-999; neutrinoLHEeta_tmp[k]=-999;  neutrinoLHEphi_tmp[k]=-999;  neutrinoLHEpid_tmp[k]=-999;
@@ -770,13 +765,9 @@ int main (int argc, char *argv[])
 
       vector< int> leptonID;
       vector< int> neutrinoID;
-    
-
       vector<GenParticle*> genLepton;
       vector<GenParticle*> genNeutrino;
 	
-     
-
       int gen_entries = branchGenParticle->GetEntries();
 	
       for(int k =0; k<4;k++){
@@ -792,8 +783,7 @@ int main (int argc, char *argv[])
       }
 
 	
-	
-      for (int i = 0 ; i < gen_entries  ; i++) {
+	for (int i = 0 ; i < gen_entries  ; i++) {
 	GenParticle *part = (GenParticle*) branchGenParticle->At(i);
 	int type   =  part-> PID;
 		
@@ -838,17 +828,10 @@ int main (int argc, char *argv[])
 	neutrinoGenpid_tmp[j] = genNeutrino.at(j)->PID;
       }
 			
-           
-     
-        
-        
+               
       //------ GEN JET Filling  -----------------//
         
       vector <Jet*> genJet;
-      vector <int> genJetIndex;
-		
-		
-
 		
       for(int k =0; k<4; k++){
 	jetGenpt_tmp[k]=-999;
@@ -866,24 +849,24 @@ int main (int argc, char *argv[])
       for (int i = 0 ; i < gjet_entries  ; i++) {
 	Jet *genjet = (Jet*) branchGenJet->At(i);
 	genJet.push_back(genjet);
-	genJetIndex.push_back(i);
+      }
 						
 			
-	int njetsgen = (genJetIndex.size()<4) ? genJetIndex.size():4;
+      int njetsgen = (genJet.size()<4) ? genJet.size():4;
 			
-	for(int j=0; j<njetsgen; j++){
-	  jetGenpt_tmp[j] = genJet.at(j)->PT;
-	  jetGeneta_tmp[j] = genJet.at(j)->Eta;
-	  jetGenphi_tmp[j] = genJet.at(j)->Phi;
-	  jetGenm_tmp[j] = genJet.at(j)->Mass;
-	  jetGenAreaX_tmp[j] = genJet.at(j)->AreaX;
-	  jetGenAreaY_tmp[j] = genJet.at(j)->AreaY;
-	  jetGenAreaZ_tmp[j] = genJet.at(j)->AreaZ;
-	  jetGenAreaT_tmp[j] = genJet.at(j)->AreaT;
-	}
+      for(int j=0; j<njetsgen; j++){
+	jetGenpt_tmp[j] = genJet.at(j)->PT;
+	jetGeneta_tmp[j] = genJet.at(j)->Eta;
+	jetGenphi_tmp[j] = genJet.at(j)->Phi;
+	jetGenm_tmp[j] = genJet.at(j)->Mass;
+	jetGenAreaX_tmp[j] = genJet.at(j)->AreaX;
+	jetGenAreaY_tmp[j] = genJet.at(j)->AreaY;
+	jetGenAreaZ_tmp[j] = genJet.at(j)->AreaZ;
+	jetGenAreaT_tmp[j] = genJet.at(j)->AreaT;
+      }
             
 			
-      }
+      
         
         
       //------ TRACK JET Filling  -----------------//
@@ -894,14 +877,14 @@ int main (int argc, char *argv[])
     
 		
       for(int k =0; k<8; k++){
-	jetGenpt_tmp[k]=-999;
-	jetGeneta_tmp[k]=-999;
-	jetGenphi_tmp[k]=-999;
-	jetGenm_tmp[k]=-999;
-	jetGenAreaX_tmp[k]=-999;
-	jetGenAreaY_tmp[k]=-999;
-	jetGenAreaZ_tmp[k]=-999;
-	jetGenAreaT_tmp[k]=-999;
+	jetTrackpt_tmp[k]=-999;
+	jetTracketa_tmp[k]=-999;
+	jetTrackphi_tmp[k]=-999;
+	jetTrackm_tmp[k]=-999;
+	jetTrackAreaX_tmp[k]=-999;
+	jetTrackAreaY_tmp[k]=-999;
+	jetTrackAreaZ_tmp[k]=-999;
+	jetTrackAreaT_tmp[k]=-999;
       }
 		
       int tjet_entries = branchTrackJet->GetEntriesFast();
@@ -910,25 +893,26 @@ int main (int argc, char *argv[])
 	Jet *trackjet = (Jet*) branchTrackJet->At(i);
 	trackJet.push_back(trackjet);
 	trackJetIndex.push_back(i);
+      }
 			
 						
-	int njetstrack = (trackJetIndex.size()<8) ? trackJetIndex.size():8;
+      int njetstrack = (trackJetIndex.size()<8) ? trackJetIndex.size():8;
             
 			
-	for(int j=0; j<njetstrack; j++){
-	  jetGenpt_tmp[j] = trackJet.at(j)->PT;
-	  jetGeneta_tmp[j] = trackJet.at(j)->Eta;
-	  jetGenphi_tmp[j] = trackJet.at(j)->Phi;
-	  jetGenm_tmp[j] = trackJet.at(j)->Mass;
-	  jetGenAreaX_tmp[j] = trackJet.at(j)->AreaX;
-	  jetGenAreaY_tmp[j] = trackJet.at(j)->AreaY;
-	  jetGenAreaZ_tmp[j] = trackJet.at(j)->AreaZ;
-	  jetGenAreaT_tmp[j] = trackJet.at(j)->AreaT;
+      for(int j=0; j<njetstrack; j++){
+	jetTrackpt_tmp[j] = trackJet.at(j)->PT;
+	jetTracketa_tmp[j] = trackJet.at(j)->Eta;
+	jetTrackphi_tmp[j] = trackJet.at(j)->Phi;
+	jetTrackm_tmp[j] = trackJet.at(j)->Mass;
+	jetTrackAreaX_tmp[j] = trackJet.at(j)->AreaX;
+	jetTrackAreaY_tmp[j] = trackJet.at(j)->AreaY;
+	jetTrackAreaZ_tmp[j] = trackJet.at(j)->AreaZ;
+	jetTrackAreaT_tmp[j] = trackJet.at(j)->AreaT;
                 
-	}
+      }
             
 			
-      }
+      
         
         
       //------  JET (JetPUID) Filling  -----------------//
@@ -979,55 +963,55 @@ int main (int argc, char *argv[])
 	}
 	nbjet_tmp = inbjet;
 
-			
-			
-	int njetspuid = (puidJetIndex.size()<8) ? puidJetIndex.size():8;
-            
-			
-	for(int j=0; j<njetspuid; j++){
-	  jetpt_tmp[j] = puidJet.at(j)->PT;
-	  jeteta_tmp[j] = puidJet.at(j)->Eta;
-	  jetphi_tmp[j] = puidJet.at(j)->Phi;
-	  jetmass_tmp[j] = puidJet.at(j)->Mass;
-	  jetAreaX_tmp[j] = puidJet.at(j)->AreaX;
-	  jetAreaY_tmp[j] = puidJet.at(j)->AreaY;
-	  jetAreaZ_tmp[j] = puidJet.at(j)->AreaZ;
-	  jetAreaT_tmp[j] = puidJet.at(j)->AreaT;
-	  jetBTagAlgo_tmp[j] = puidJet.at(j)->BTagAlgo;
-	  jetBTagDefault_tmp[j] = puidJet.at(j)->BTagDefault;
-	  jetBTagPhysics_tmp[j] = puidJet.at(j)->BTagPhysics;
-	  jetBTagNearest2_tmp[j] = puidJet.at(j)->BTagNearest2;
-	  jetBTagNearest3_tmp[j] = puidJet.at(j)->BTagNearest3;
-	  jetBTagHeaviest_tmp[j] = puidJet.at(j)->BTagHeaviest;
-	  jetFlavourAlgo_tmp[j] = puidJet.at(j)->flavourAlgo;
-	  jetFlavourDefault_tmp[j] = puidJet.at(j)->flavourDefault;
-	  jetFlavourPhysics_tmp[j] = puidJet.at(j)->flavourPhysics;
-	  jetFlavourNearest2_tmp[j] = puidJet.at(j)->flavourNearest2;
-	  jetFlavourNearest3_tmp[j] = puidJet.at(j)->flavourNearest3;
-	  jetFlavourHeaviest_tmp[j] = puidJet.at(j)->flavourHeaviest;
-	  jetptD_tmp[j] = puidJet.at(j)->ptD;
-	  jetptDNe_tmp[j] = puidJet.at(j)->ptDNe;
-	  jetptDCh_tmp[j] = puidJet.at(j)->ptDCh;
-	  jetnNeutral_tmp[j] = puidJet.at(j)->nNeutral;
-	  jetnCharged_tmp[j] = puidJet.at(j)->nCharged;
-	  jetneuEMfrac_tmp[j] = puidJet.at(j)->neuEMfrac;
-	  jetneuHadfrac_tmp[j] = puidJet.at(j)->neuHadfrac;
-	  jetbetaClassic_tmp[j] = puidJet.at(j)->betaClassic;
-	  jetbetaClassicStar_tmp[j] = puidJet.at(j)->betaClassicStar;
-	  jetbeta_tmp[j] = puidJet.at(j)->beta;
-	  jetbetaStar_tmp[j] = puidJet.at(j)->betaStar;
-	  jetconstituents_tmp[j] = puidJet.at(j)->constituents;
-	}
-			 
-	if (njetspuid >= 2){
-	  jet1.SetPtEtaPhiM(jetpt_tmp[0], jeteta_tmp[0],jetphi_tmp[0],jetmass_tmp[0]);
-	  jet2.SetPtEtaPhiM(jetpt_tmp[1], jeteta_tmp[1],jetphi_tmp[1],jetmass_tmp[1]);
-	  detajj_tmp = fabs(jeteta_tmp[0] -jeteta_tmp[1]);
-	  mjj_tmp = (jet1 + jet2).M(); 
-	}
-            
-			
       }
+			
+      int njetspuid = (puidJetIndex.size()<8) ? puidJetIndex.size():8;
+            
+			
+      for(int j=0; j<njetspuid; j++){
+	jetpt_tmp[j] = puidJet.at(j)->PT;
+	jeteta_tmp[j] = puidJet.at(j)->Eta;
+	jetphi_tmp[j] = puidJet.at(j)->Phi;
+	jetmass_tmp[j] = puidJet.at(j)->Mass;
+	jetAreaX_tmp[j] = puidJet.at(j)->AreaX;
+	jetAreaY_tmp[j] = puidJet.at(j)->AreaY;
+	jetAreaZ_tmp[j] = puidJet.at(j)->AreaZ;
+	jetAreaT_tmp[j] = puidJet.at(j)->AreaT;
+	jetBTagAlgo_tmp[j] = puidJet.at(j)->BTagAlgo;
+	jetBTagDefault_tmp[j] = puidJet.at(j)->BTagDefault;
+	jetBTagPhysics_tmp[j] = puidJet.at(j)->BTagPhysics;
+	jetBTagNearest2_tmp[j] = puidJet.at(j)->BTagNearest2;
+	jetBTagNearest3_tmp[j] = puidJet.at(j)->BTagNearest3;
+	jetBTagHeaviest_tmp[j] = puidJet.at(j)->BTagHeaviest;
+	jetFlavourAlgo_tmp[j] = puidJet.at(j)->flavourAlgo;
+	jetFlavourDefault_tmp[j] = puidJet.at(j)->flavourDefault;
+	jetFlavourPhysics_tmp[j] = puidJet.at(j)->flavourPhysics;
+	jetFlavourNearest2_tmp[j] = puidJet.at(j)->flavourNearest2;
+	jetFlavourNearest3_tmp[j] = puidJet.at(j)->flavourNearest3;
+	jetFlavourHeaviest_tmp[j] = puidJet.at(j)->flavourHeaviest;
+	jetptD_tmp[j] = puidJet.at(j)->ptD;
+	jetptDNe_tmp[j] = puidJet.at(j)->ptDNe;
+	jetptDCh_tmp[j] = puidJet.at(j)->ptDCh;
+	jetnNeutral_tmp[j] = puidJet.at(j)->nNeutral;
+	jetnCharged_tmp[j] = puidJet.at(j)->nCharged;
+	jetneuEMfrac_tmp[j] = puidJet.at(j)->neuEMfrac;
+	jetneuHadfrac_tmp[j] = puidJet.at(j)->neuHadfrac;
+	jetbetaClassic_tmp[j] = puidJet.at(j)->betaClassic;
+	jetbetaClassicStar_tmp[j] = puidJet.at(j)->betaClassicStar;
+	jetbeta_tmp[j] = puidJet.at(j)->beta;
+	jetbetaStar_tmp[j] = puidJet.at(j)->betaStar;
+	jetconstituents_tmp[j] = puidJet.at(j)->constituents;
+      }
+			 
+      if (njetspuid >= 2){
+	jet1.SetPtEtaPhiM(jetpt_tmp[0], jeteta_tmp[0],jetphi_tmp[0],jetmass_tmp[0]);
+	jet2.SetPtEtaPhiM(jetpt_tmp[1], jeteta_tmp[1],jetphi_tmp[1],jetmass_tmp[1]);
+	detajj_tmp = fabs(jeteta_tmp[0] -jeteta_tmp[1]);
+	mjj_tmp = (jet1 + jet2).M(); 
+      }
+            
+			
+      
         
         
       //------  JET (Jetpuppi) Filling  -----------------//
@@ -1077,56 +1061,57 @@ int main (int argc, char *argv[])
 	  inbjetpuppi++;
         }
 
-	nbjet_puppi_tmp = inbjetpuppi;
-    
-    
-    	int njetspuppi = (puppiJetIndex.size()<8) ? puppiJetIndex.size():8;
-    
-    
-	for(int j=0; j<njetspuppi; j++){
-	  jetpt_puppi_tmp[j] = puppiJet.at(j)->PT;
-	  jeteta_puppi_tmp[j] = puppiJet.at(j)->Eta;
-	  jetphi_puppi_tmp[j] = puppiJet.at(j)->Phi;
-	  jetmass_puppi_tmp[j] = puppiJet.at(j)->Mass;
-	  jetAreaX_puppi_tmp[j] = puppiJet.at(j)->AreaX;
-	  jetAreaY_puppi_tmp[j] = puppiJet.at(j)->AreaY;
-	  jetAreaZ_puppi_tmp[j] = puppiJet.at(j)->AreaZ;
-	  jetAreaT_puppi_tmp[j] = puppiJet.at(j)->AreaT;
-	  jetBTagAlgo_puppi_tmp[j] = puppiJet.at(j)->BTagAlgo;
-	  jetBTagDefault_puppi_tmp[j] = puppiJet.at(j)->BTagDefault;
-	  jetBTagPhysics_puppi_tmp[j] = puppiJet.at(j)->BTagPhysics;
-	  jetBTagNearest2_puppi_tmp[j] = puppiJet.at(j)->BTagNearest2;
-	  jetBTagNearest3_puppi_tmp[j] = puppiJet.at(j)->BTagNearest3;
-	  jetBTagHeaviest_puppi_tmp[j] = puppiJet.at(j)->BTagHeaviest;
-	  jetFlavourAlgo_puppi_tmp[j] = puppiJet.at(j)->flavourAlgo;
-	  jetFlavourDefault_puppi_tmp[j] = puppiJet.at(j)->flavourDefault;
-	  jetFlavourPhysics_puppi_tmp[j] = puppiJet.at(j)->flavourPhysics;
-	  jetFlavourNearest2_puppi_tmp[j] = puppiJet.at(j)->flavourNearest2;
-	  jetFlavourNearest3_puppi_tmp[j] = puppiJet.at(j)->flavourNearest3;
-	  jetFlavourHeaviest_puppi_tmp[j] = puppiJet.at(j)->flavourHeaviest;
-	  jetptD_puppi_tmp[j] = puppiJet.at(j)->ptD;
-	  jetptDNe_puppi_tmp[j] = puppiJet.at(j)->ptDNe;
-	  jetptDCh_puppi_tmp[j] = puppiJet.at(j)->ptDCh;
-	  jetnNeutral_puppi_tmp[j] = puppiJet.at(j)->nNeutral;
-	  jetnCharged_puppi_tmp[j] = puppiJet.at(j)->nCharged;
-	  jetneuEMfrac_puppi_tmp[j] = puppiJet.at(j)->neuEMfrac;
-	  jetneuHadfrac_puppi_tmp[j] = puppiJet.at(j)->neuHadfrac;
-	  jetbetaClassic_puppi_tmp[j] = puppiJet.at(j)->betaClassic;
-	  jetbetaClassicStar_puppi_tmp[j] = puppiJet.at(j)->betaClassicStar;
-	  jetbeta_puppi_tmp[j] = puppiJet.at(j)->beta;
-	  jetbetaStar_puppi_tmp[j] = puppiJet.at(j)->betaStar;
-	  jetconstituents_puppi_tmp[j] = puppiJet.at(j)->constituents;
-	}
-    
-	if (njetspuppi >= 2){
-	  jet1puppi.SetPtEtaPhiM(jetpt_puppi_tmp[0], jeteta_puppi_tmp[0],jetphi_puppi_tmp[0],jetmass_puppi_tmp[0]);
-	  jet2puppi.SetPtEtaPhiM(jetpt_puppi_tmp[1], jeteta_puppi_tmp[1],jetphi_puppi_tmp[1],jetmass_puppi_tmp[1]);
-	  detajj_puppi_tmp = fabs(jeteta_puppi_tmp[0] -jeteta_puppi_tmp[1]);
-	  mjj_puppi_tmp = (jet1puppi + jet2puppi).M();
-	}
-    
-    
       }
+      nbjet_puppi_tmp = inbjetpuppi;
+    
+    
+      int njetspuppi = (puppiJetIndex.size()<8) ? puppiJetIndex.size():8;
+    
+    
+      for(int j=0; j<njetspuppi; j++){
+	jetpt_puppi_tmp[j] = puppiJet.at(j)->PT;
+	jeteta_puppi_tmp[j] = puppiJet.at(j)->Eta;
+	jetphi_puppi_tmp[j] = puppiJet.at(j)->Phi;
+	jetmass_puppi_tmp[j] = puppiJet.at(j)->Mass;
+	jetAreaX_puppi_tmp[j] = puppiJet.at(j)->AreaX;
+	jetAreaY_puppi_tmp[j] = puppiJet.at(j)->AreaY;
+	jetAreaZ_puppi_tmp[j] = puppiJet.at(j)->AreaZ;
+	jetAreaT_puppi_tmp[j] = puppiJet.at(j)->AreaT;
+	jetBTagAlgo_puppi_tmp[j] = puppiJet.at(j)->BTagAlgo;
+	jetBTagDefault_puppi_tmp[j] = puppiJet.at(j)->BTagDefault;
+	jetBTagPhysics_puppi_tmp[j] = puppiJet.at(j)->BTagPhysics;
+	jetBTagNearest2_puppi_tmp[j] = puppiJet.at(j)->BTagNearest2;
+	jetBTagNearest3_puppi_tmp[j] = puppiJet.at(j)->BTagNearest3;
+	jetBTagHeaviest_puppi_tmp[j] = puppiJet.at(j)->BTagHeaviest;
+	jetFlavourAlgo_puppi_tmp[j] = puppiJet.at(j)->flavourAlgo;
+	jetFlavourDefault_puppi_tmp[j] = puppiJet.at(j)->flavourDefault;
+	jetFlavourPhysics_puppi_tmp[j] = puppiJet.at(j)->flavourPhysics;
+	jetFlavourNearest2_puppi_tmp[j] = puppiJet.at(j)->flavourNearest2;
+	jetFlavourNearest3_puppi_tmp[j] = puppiJet.at(j)->flavourNearest3;
+	jetFlavourHeaviest_puppi_tmp[j] = puppiJet.at(j)->flavourHeaviest;
+	jetptD_puppi_tmp[j] = puppiJet.at(j)->ptD;
+	jetptDNe_puppi_tmp[j] = puppiJet.at(j)->ptDNe;
+	jetptDCh_puppi_tmp[j] = puppiJet.at(j)->ptDCh;
+	jetnNeutral_puppi_tmp[j] = puppiJet.at(j)->nNeutral;
+	jetnCharged_puppi_tmp[j] = puppiJet.at(j)->nCharged;
+	jetneuEMfrac_puppi_tmp[j] = puppiJet.at(j)->neuEMfrac;
+	jetneuHadfrac_puppi_tmp[j] = puppiJet.at(j)->neuHadfrac;
+	jetbetaClassic_puppi_tmp[j] = puppiJet.at(j)->betaClassic;
+	jetbetaClassicStar_puppi_tmp[j] = puppiJet.at(j)->betaClassicStar;
+	jetbeta_puppi_tmp[j] = puppiJet.at(j)->beta;
+	jetbetaStar_puppi_tmp[j] = puppiJet.at(j)->betaStar;
+	jetconstituents_puppi_tmp[j] = puppiJet.at(j)->constituents;
+      }
+    
+      if (njetspuppi >= 2){
+	jet1puppi.SetPtEtaPhiM(jetpt_puppi_tmp[0], jeteta_puppi_tmp[0],jetphi_puppi_tmp[0],jetmass_puppi_tmp[0]);
+	jet2puppi.SetPtEtaPhiM(jetpt_puppi_tmp[1], jeteta_puppi_tmp[1],jetphi_puppi_tmp[1],jetmass_puppi_tmp[1]);
+	detajj_puppi_tmp = fabs(jeteta_puppi_tmp[0] -jeteta_puppi_tmp[1]);
+	mjj_puppi_tmp = (jet1puppi + jet2puppi).M();
+      }
+    
+    
+      
 
 
       //-------------LEPTON Filling-----------------//
