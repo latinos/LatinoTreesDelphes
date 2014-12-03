@@ -65,6 +65,15 @@ struct leptonDescendingPt
   }
 };
 
+struct genParticleDescendingPt 
+{
+  bool operator() (GenParticle* a, GenParticle* b) 
+  {     
+    return a->PT > b->PT;
+  }
+};
+    
+
 float DeltaR(float eta1, float eta2, float phi1, float phi2)
 {
   float deta = eta2 - eta1;
@@ -131,6 +140,7 @@ int main (int argc, char *argv[])
   TClonesArray* branchTrackJet = delphesTree->UseBranch("TrackJet");
   TClonesArray* branchJet = delphesTree->UseBranch("JetPUID");
   TClonesArray* branchPuppiJet = delphesTree->UseBranch("PuppiJetPUID");
+  TClonesArray* branchGenParticle = delphesTree->UseBranch("GenParticles");
     
   TClonesArray* branchMET = delphesTree->UseBranch("MissingET");
   TClonesArray* branchPuppiMET = delphesTree->UseBranch("PuppiMissingET");
@@ -139,6 +149,11 @@ int main (int argc, char *argv[])
   TClonesArray* branchNPU = delphesTree->UseBranch("NPU");
   TClonesArray* branchGlobalRhokt4 = delphesTree->UseBranch("GlobalRhoKt4");
   TClonesArray* branchGlobalRhoGFJ= delphesTree->UseBranch("GlobalRhoGridFastJet");
+  TClonesArray* branchRhokt4 = delphesTree->UseBranch("RhoKt4");
+  TClonesArray* branchRhoGFJ= delphesTree->UseBranch("RhoGridFastJet");
+  TClonesArray* branchPuppiRhokt4 = delphesTree->UseBranch("PuppiRhoKt4");
+  TClonesArray* branchPuppiRhoGFJ= delphesTree->UseBranch("PuppiRhoGridFastJet");
+  
 
     
 
@@ -216,6 +231,42 @@ int main (int argc, char *argv[])
         
         
   }
+  
+  //------Gen Particles  
+  
+  int ngen=4;
+  float leptonGenpt_tmp[ngen];
+  float leptonGenpid_tmp[ngen];
+  float leptonGenphi_tmp[ngen];
+  float leptonGeneta_tmp[ngen];
+  float neutrinoGenpt_tmp[ngen];
+  float neutrinoGenpid_tmp[ngen];
+  float neutrinoGenphi_tmp[ngen];
+  float neutrinoGeneta_tmp[ngen];
+  
+  	
+  for(int igen = 0; igen<ngen; igen++){
+    TString leptonGenptStr = "leptonGenpt"; leptonGenptStr += (igen+1);
+    TString leptonGenetaStr = "leptonGeneta"; leptonGenetaStr += (igen+1);
+    TString leptonGenphiStr = "leptonGenphi"; leptonGenphiStr += (igen+1);
+    TString leptonGenpidStr = "leptonGenpid"; leptonGenpidStr += (igen+1);
+    TString neutrinoGenptStr = "neutrinoGenpt"; neutrinoGenptStr += (igen+1);
+    TString neutrinoGenetaStr = "neutrinoGeneta"; neutrinoGenetaStr += (igen+1);
+    TString neutrinoGenphiStr = "neutrinoGenphi"; neutrinoGenphiStr += (igen+1);
+    TString neutrinoGenpidStr = "neutrinoGenpid"; neutrinoGenpidStr += (igen+1);
+    
+    easyTree -> Branch(leptonGenptStr,&leptonGenpt_tmp[igen],leptonGenptStr+"/F");
+    easyTree -> Branch(leptonGenetaStr,&leptonGeneta_tmp[igen],leptonGenetaStr+"/F");
+    easyTree -> Branch(leptonGenphiStr,&leptonGenphi_tmp[igen],leptonGenphiStr+"/F");
+    easyTree -> Branch(leptonGenpidStr,&leptonGenpid_tmp[igen],leptonGenpidStr+"/F");
+    
+    easyTree -> Branch(neutrinoGenptStr,&neutrinoGenpt_tmp[igen],neutrinoGenptStr+"/F");
+    easyTree -> Branch(neutrinoGenetaStr,&neutrinoGeneta_tmp[igen],neutrinoGenetaStr+"/F");
+    easyTree -> Branch(neutrinoGenphiStr,&neutrinoGenphi_tmp[igen],neutrinoGenphiStr+"/F");
+    easyTree -> Branch(neutrinoGenpidStr,&neutrinoGenpid_tmp[igen],neutrinoGenpidStr+"/F");
+  }
+  
+  
 	
   //--------- GEN JETS Information
   int ngjet=4;
@@ -468,8 +519,6 @@ int main (int argc, char *argv[])
   float sumChargedHadron_tmp[nlep], sumNeutral_tmp[nlep], sumChargedPU_tmp[nlep], sumAllParticles_tmp[nlep];
   double  ch_tmp[nlhe];
 
-
-
   easyTree -> Branch("mll",&mll_tmp,"mll/F");
   easyTree -> Branch("PTll",&PTll_tmp,"PTll/F");
   easyTree -> Branch("dPhill",&dPhill_tmp,"dPhill/F");
@@ -526,6 +575,57 @@ int main (int argc, char *argv[])
   float pfmet_puppi_tmp, pfmetphi_puppi_tmp;
   easyTree -> Branch("pfmet_puppi",&pfmet_puppi_tmp,"pfmet_puppi/F");
   easyTree -> Branch("pfmetphi_puppi",&pfmetphi_puppi_tmp,"pfmetphi_puppi/F");
+  
+  //  NPU
+  
+  float npu_tmp;
+  easyTree->Branch("npu",&npu_tmp,"npu/F");
+  
+  //  Global RhoKt4
+  
+  float  globalRhokt4_tmp ;
+  easyTree->Branch("globalRhokt4",&globalRhokt4_tmp,"globalRhokt4/F");
+  
+  //  Global RhoGridFastJet
+  
+  float  globalRhoGridFastJet_tmp ;
+  easyTree->Branch("globalGridFastJet",&globalRhoGridFastJet_tmp,"globalGridFastJet/F");
+ 
+  
+  //  RhoKt4
+  // 0: eta = 0 and eta = 2.5 range
+  // 1: eta = 2.5 and eta = 4 range
+  // 2: eta = 4 and eta = 5 range
+
+  float Rhokt4_tmp[3] ;
+  easyTree->Branch("Rhokt4_0",&Rhokt4_tmp[0],"Rhokt4_0/F");
+  easyTree->Branch("Rhokt4_1",&Rhokt4_tmp[1],"Rhokt4_1/F");
+  easyTree->Branch("Rhokt4_2",&Rhokt4_tmp[2],"Rhokt4_2/F");
+  
+  //  RhoGridFastJet
+  // 0: eta = 0 and eta = 2.5 range
+  // 1: eta = 2.5 and eta = 4 range
+  // 2: eta = 4 and eta = 5 range
+  float RhoGridFastJet_tmp[3] ;
+  easyTree->Branch("RhoGridFastJet_0",&RhoGridFastJet_tmp[0],"RhoGridFastJet_0/F");
+  easyTree->Branch("RhoGridFastJet_1",&RhoGridFastJet_tmp[1],"RhoGridFastJet_1/F");
+  easyTree->Branch("RhoGridFastJet_2",&RhoGridFastJet_tmp[2],"RhoGridFastJet_2/F");
+  
+  //  PuppiRhoKt4
+  // 0: eta = 0 and eta = 2.5 range
+  // 1: eta = 2.5 and eta = 5 range
+  float PuppiRhokt4_tmp[2] ;
+  easyTree->Branch("PuppiRhokt4_0",&PuppiRhokt4_tmp[0],"PuppiRhokt4_0/F");
+  easyTree->Branch("PuppiRhokt4_1",&PuppiRhokt4_tmp[1],"PuppiRhokt4_1/F");
+
+  //  RhoGridFastJet
+  // 0: eta = 0 and eta = 2.5 range
+  // 1: eta = 2.5 and eta = 5 range
+  float PuppiRhoGridFastJet_tmp[2] ;
+  easyTree->Branch("PuppiRhoGridFastJet_0",&PuppiRhoGridFastJet_tmp[0],"PuppiRhoGridFastJet_0/F");
+  easyTree->Branch("PuppiRhoGridFastJet_1",&PuppiRhoGridFastJet_tmp[1],"PuppiRhoGridFastJet_1/F");
+
+  
 
     
     
@@ -664,7 +764,81 @@ int main (int argc, char *argv[])
 	neutrinoLHEpid_tmp[j] = lheNeutrino.at(j)->PID;
       }
             
-            
+      //--------- GenParticle filling
+
+
+
+      vector< int> leptonID;
+      vector< int> neutrinoID;
+    
+
+      vector<GenParticle*> genLepton;
+      vector<GenParticle*> genNeutrino;
+	
+     
+
+      int gen_entries = branchGenParticle->GetEntries();
+	
+      for(int k =0; k<4;k++){
+	
+	leptonGenpt_tmp[k]=-99;
+	leptonGeneta_tmp[k]=-99;
+	leptonGenphi_tmp[k]=-99;
+	leptonGenpid_tmp[k]=-99;
+	neutrinoGenpt_tmp[k]=-99;
+	neutrinoGeneta_tmp[k]=-99;
+	neutrinoGenphi_tmp[k]=-99;
+	neutrinoGenpid_tmp[k]=-99;
+      }
+
+	
+	
+      for (int i = 0 ; i < gen_entries  ; i++) {
+	GenParticle *part = (GenParticle*) branchGenParticle->At(i);
+	int type   =  part-> PID;
+		
+
+	if(part->Status!=1)continue;
+			
+	if (type == 11 || type == 13 || type == 15 ||type == -11 || type == -13 || type == -15 ) {
+	  leptonID.push_back(i);
+	  genLepton.push_back(part);
+	}
+			
+	if (type == 12 || type == 14 || type == 16 ||type == -12 || type == -14 || type == -16 ) {
+	  neutrinoID.push_back(i);
+	  genNeutrino.push_back(part);
+	}
+
+      }
+
+
+      sort(genLepton.begin(), genLepton.end(),genParticleDescendingPt());
+      sort(genNeutrino.begin(), genNeutrino.end(),genParticleDescendingPt());
+			
+			
+
+      int jgl = (leptonID.size()<4) ? leptonID.size():4;
+      int jgn = (neutrinoID.size()<4) ? neutrinoID.size():4;
+			
+     
+			
+      for(int j=0; j<jgl; j++){
+	leptonGenpt_tmp[j] = genLepton.at(j)->PT;
+	leptonGeneta_tmp[j] = genLepton.at(j)->Eta;
+	leptonGenphi_tmp[j] = genLepton.at(j)->Phi;
+	leptonGenpid_tmp[j] = genLepton.at(j)->PID;
+
+      }
+			
+      for(int j=0; j<jgn; j++){
+	neutrinoGenpt_tmp[j] = genNeutrino.at(j)->PT;
+	neutrinoGeneta_tmp[j] = genNeutrino.at(j)->Eta;
+	neutrinoGenphi_tmp[j] = genNeutrino.at(j)->Phi;
+	neutrinoGenpid_tmp[j] = genNeutrino.at(j)->PID;
+      }
+			
+           
      
         
         
@@ -902,11 +1076,11 @@ int main (int argc, char *argv[])
 	  hardbjpb_puppi_tmp = 1;
 	  inbjetpuppi++;
         }
+
 	nbjet_puppi_tmp = inbjetpuppi;
     
     
-    
-	int njetspuppi = (puppiJetIndex.size()<8) ? puppiJetIndex.size():8;
+    	int njetspuppi = (puppiJetIndex.size()<8) ? puppiJetIndex.size():8;
     
     
 	for(int j=0; j<njetspuppi; j++){
@@ -955,7 +1129,6 @@ int main (int argc, char *argv[])
       }
 
 
-
       //-------------LEPTON Filling-----------------//
 
       nextra_tmp=-999; sameflav_tmp=-999; nlepton_tmp=-999;
@@ -971,7 +1144,6 @@ int main (int argc, char *argv[])
 	
 	
       vector <Lepton> leptonvec;
-
       TLorentzVector lep1, lep2;
 
       //default isolation is calculated using DBeta Correction
@@ -1092,7 +1264,84 @@ int main (int argc, char *argv[])
       MissingET* puppimet = (MissingET*) branchPuppiMET->At(0);
       pfmet_puppi_tmp = puppimet->MET;
       pfmetphi_puppi_tmp = puppimet->Phi;
+      
+      //  NPU  Filling
+      npu_tmp=-999;
+      ScalarHT* scht = (ScalarHT*)branchNPU->At(0);
+      npu_tmp = scht->HT;
+       
+      //  Global RhoKt4 Filling
+      globalRhokt4_tmp =-999.;
+      Rho* grhokt4 = (Rho*)branchRhokt4->At(0);
+      globalRhokt4_tmp = grhokt4->Rho; 
+	
+      //  Global RhoGridFastJet Filling
+      globalRhoGridFastJet_tmp = -999.;
+      Rho* grogfj = (Rho*)branchGlobalRhoGFJ->At(0);
+      globalRhoGridFastJet_tmp = grogfj->Rho;
+ 
+      //  RhoKt4 Filling
+
+      int rk_entries = branchRhokt4->GetEntriesFast();
+
+      for(int i=0; i<rk_entries; i++){
+	Rho* rho = (Rho*)branchRhokt4->At(i);
+	if(rho->Edges[0] == 0 && rho->Edges[1] == 2.5){
+	  Rhokt4_tmp[0] = rho->Rho;
+	}
+	if(rho->Edges[0] == 2.5 && rho->Edges[1] == 4){
+	  Rhokt4_tmp[1] = rho->Rho;
+	}
+	if(rho->Edges[0] == 4 && rho->Edges[1] == 5){
+	  Rhokt4_tmp[2] = rho->Rho;
+	}
+      }
+
+      int rgk_entries = branchRhoGFJ->GetEntriesFast();
+
+      for(int i=0; i<rgk_entries; i++){
+	Rho* rho = (Rho*)branchRhoGFJ->At(i);
+	if(rho->Edges[0] == 0 && rho->Edges[1] == 2.5){
+	  RhoGridFastJet_tmp[0] = rho->Rho;
+	}
+	if(rho->Edges[0] == 2.5 && rho->Edges[1] == 4){
+	  RhoGridFastJet_tmp[1] = rho->Rho;
+	}
+	if(rho->Edges[0] == 4 && rho->Edges[1] == 5){
+	  RhoGridFastJet_tmp[2] = rho->Rho;
+	}
+      }
+
+      // Puppi Rhokt4 filling
+
+      int rpk_entries = branchPuppiRhokt4->GetEntriesFast();
+
+      for(int i=0; i<rpk_entries; i++){
+	Rho* rho = (Rho*)branchPuppiRhokt4->At(i);
+	if(rho->Edges[0] == 0 && rho->Edges[1] == 2.5){
+	  PuppiRhokt4_tmp[0] = rho->Rho;
+	}
+	if(rho->Edges[0] == 2.5 && rho->Edges[1] == 5){
+	  PuppiRhokt4_tmp[1] = rho->Rho;
+	}
 		
+      }
+
+      //Puppi GridFastJetRho filling
+
+      int rpgk_entries = branchPuppiRhoGFJ->GetEntriesFast();
+
+      for(int i=0; i<rpgk_entries; i++){
+	Rho* rho = (Rho*)branchPuppiRhoGFJ->At(i);
+	if(rho->Edges[0] == 0 && rho->Edges[1] == 2.5){
+	  PuppiRhoGridFastJet_tmp[0] = rho->Rho;
+	}
+	if(rho->Edges[0] == 2.5 && rho->Edges[1] == 5){
+	  PuppiRhoGridFastJet_tmp[1] = rho->Rho;
+	}
+		
+      }
+
         
       easyTree -> Fill();
 		
