@@ -536,7 +536,7 @@ int main (int argc, char *argv[])
     TString isoStr = "iso"; isoStr += (ilep+1);
     TString isoDBetaStr = "isoDBeta"; isoDBetaStr += (ilep+1);
     TString isoRhoCorrStr = "isoRhoCorr"; isoRhoCorrStr += (ilep+1);
-    TStritng sumChargedHadronStr = "sumChargedHadron"; sumChargedHadronStr += (ilep+1);
+    TString sumChargedHadronStr = "sumChargedHadron"; sumChargedHadronStr += (ilep+1);
     TString sumNeutralStr = "sumNeutral"; sumNeutralStr += (ilep+1);
     TString sumChargedPUStr = "sumChargedPU"; sumChargedPUStr += (ilep+1);
     TString sumAllParticlesStr = "sumAllParticles"; sumAllParticlesStr += (ilep+1);
