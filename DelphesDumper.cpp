@@ -100,7 +100,6 @@ int main (int argc, char *argv[])
   gSystem->Load("libDelphes");
   //----------------------------------------------------------------------------------------
   //complex object definitions
-  vector<string> inputFiles;
   //change it for root input
   TChain* delphesNtuples = new TChain("Delphes");
   ExRootTreeReader *delphesTree = new ExRootTreeReader(delphesNtuples);
@@ -168,7 +167,7 @@ int main (int argc, char *argv[])
   float leptonLHEpt_tmp[nlhe], leptonLHEeta_tmp[nlhe], leptonLHEphi_tmp[nlhe], leptonLHEpid_tmp[nlhe], leptonLHEch_tmp[nlhe], leptonLHEm_tmp[nlhe] ;
   float neutrinoLHEpt_tmp[nlhe], neutrinoLHEeta_tmp[nlhe], neutrinoLHEphi_tmp[nlhe], neutrinoLHEpid_tmp[nlhe];
   float jetLHEPartonpt_tmp[nlhe], jetLHEPartoneta_tmp[nlhe], jetLHEPartonphi_tmp[nlhe], jetLHEPartonpid_tmp[nlhe];
-  float jetLHEGluonpt_tmp[nlhe], jetLHEGluoneta_tmp[nlhe], jetLHEGluonphi_tmp[nlhe], jetLHEGluonpid_tmp[nlhe], jetLHEGluonch_tmp[nlhe] ;
+  float jetLHEGluonpt_tmp[nlhe], jetLHEGluoneta_tmp[nlhe], jetLHEGluonphi_tmp[nlhe], jetLHEGluonpid_tmp[nlhe] ;
   float vbosonLHEpt_tmp[nlhe], vbosonLHEeta_tmp[nlhe], vbosonLHEphi_tmp[nlhe], vbosonLHEpid_tmp[nlhe], vbosonLHEch_tmp[nlhe],vbosonLHEm_tmp[nlhe] ;
 	
 	
@@ -1176,7 +1175,7 @@ int main (int argc, char *argv[])
       sort(leptonvec.begin(),leptonvec.end(),leptonDescendingPt());
 	
 
-      for(int i =0; i<leptonvec.size(); i++){
+      for(unsigned int i =0; i<leptonvec.size(); i++){
 	pt_tmp[i] = leptonvec.at(i).lpt;
 	eta_tmp[i] = leptonvec.at(i).leta;
 	phi_tmp[i] = leptonvec.at(i).lphi;
@@ -1257,7 +1256,7 @@ int main (int argc, char *argv[])
        
       //  Global RhoKt4 Filling
       globalRhokt4_tmp =-999.;
-      Rho* grhokt4 = (Rho*)branchRhokt4->At(0);
+      Rho* grhokt4 = (Rho*)branchGlobalRhokt4->At(0);
       globalRhokt4_tmp = grhokt4->Rho; 
 	
       //  Global RhoGridFastJet Filling
@@ -1336,7 +1335,7 @@ int main (int argc, char *argv[])
 	
   //easyTree -> Print("easyDelphes");
   outputFile -> Write();
-  delete outputFile;
+  outputFile->Delete("easyDelphes");
 }
 
 
