@@ -1335,7 +1335,7 @@ int main (int argc, char *argv[])
 	
   //easyTree -> Print("easyDelphes");
   outputFile -> Write();
-  outputFile->Delete("easyDelphes");
+  outputFile->Delete();
 }
 
 
