@@ -3,6 +3,7 @@
   ./DelphesDumper rootfile  output.root
 */
 
+
 #include <algorithm>
 #include <vector>
 #include <iostream>
@@ -65,14 +66,14 @@ struct leptonDescendingPt
   }
 };
 
-struct genParticleDescendingPt 
+/* struct genParticleDescendingPt 
 {
   bool operator() (GenParticle* a, GenParticle* b) 
   {     
     return a->PT > b->PT;
   }
-};
-    
+}; 
+*/  
 
 float DeltaR(float eta1, float eta2, float phi1, float phi2)
 {
@@ -139,7 +140,7 @@ int main (int argc, char *argv[])
   TClonesArray* branchTrackJet = delphesTree->UseBranch("TrackJet");
   TClonesArray* branchJet = delphesTree->UseBranch("JetPUID");
   TClonesArray* branchPuppiJet = delphesTree->UseBranch("PuppiJetPUID");
-  TClonesArray* branchGenParticle = delphesTree->UseBranch("GenParticles");
+  //TClonesArray* branchGenParticle = delphesTree->UseBranch("GenParticles");
     
   TClonesArray* branchMET = delphesTree->UseBranch("MissingET");
   TClonesArray* branchPuppiMET = delphesTree->UseBranch("PuppiMissingET");
@@ -231,7 +232,7 @@ int main (int argc, char *argv[])
   
   //------Gen Particles  
   
-  int ngen=4;
+/*  int ngen=4;
   float leptonGenpt_tmp[ngen];
   float leptonGenpid_tmp[ngen];
   float leptonGenphi_tmp[ngen];
@@ -263,7 +264,7 @@ int main (int argc, char *argv[])
     easyTree -> Branch(neutrinoGenpidStr,&neutrinoGenpid_tmp[igen],neutrinoGenpidStr+"/F");
   }
   
-  
+*/  
 	
   //--------- GEN JETS Information
   int ngjet=4;
@@ -760,7 +761,7 @@ int main (int argc, char *argv[])
             
       //--------- GenParticle filling
 
-
+/*
 
       vector< int> leptonID;
       vector< int> neutrinoID;
@@ -826,7 +827,7 @@ int main (int argc, char *argv[])
 	neutrinoGenphi_tmp[j] = genNeutrino.at(j)->Phi;
 	neutrinoGenpid_tmp[j] = genNeutrino.at(j)->PID;
       }
-			
+*/			
                
       //------ GEN JET Filling  -----------------//
         
